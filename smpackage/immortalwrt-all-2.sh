@@ -83,8 +83,9 @@ echo "最终配置调整..."
 # 确保关键配置启用
 echo "检查和调整关键配置..."
 
-set_package_enabled() {
-    local symbol="CONFIG_PACKAGE_$1"
+set_config_enabled() {
+    local symbol="$1"
+    local label="${2:-$1}"
 
     if grep -q "^${symbol}=y$" .config; then
         return 0
@@ -96,8 +97,17 @@ set_package_enabled() {
         printf '%s=y\n' "$symbol" >> .config
     fi
 
-    echo "[✓] 启用 $1"
+    echo "[✓] 启用 $label"
 }
+
+set_package_enabled() {
+    set_config_enabled "CONFIG_PACKAGE_$1" "$1"
+}
+
+# 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
+set_config_enabled CONFIG_TARGET_rockchip "rockchip 目标"
+set_config_enabled CONFIG_TARGET_rockchip_armv8 "rockchip armv8 目标"
+set_config_enabled CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s "FriendlyElec NanoPi R3S 设备"
 
 # LuCI、中文界面和主题
 set_package_enabled luci
