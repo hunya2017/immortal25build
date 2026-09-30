@@ -299,6 +299,51 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  save_config:
+    name: 保存 .config 到仓库
+    needs: build
+    if: success()
+    runs-on: ubuntu-22.04
+    concurrency:
+      group: immortalwrt-r3s-config-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - name: 检出当前分支
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: 下载本次编译配置
+        uses: actions/download-artifact@v4
+        with:
+          name: immortalwrt-r3s-buildinfo
+          path: generated-buildinfo
+
+      - name: 提交更新后的配置
+        run: |
+          source_config="generated-buildinfo/immortalwrt-r3s.config"
+          target_config="$CONFIG_FILE"
+          test -s "$source_config" || { echo '编译配置文件为空或不存在'; exit 1; }
+          grep -qx 'CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y' "$source_config" || {
+            echo '配置文件未选择 NanoPi R3S，拒绝提交'
+            exit 1
+          }
+          mkdir -p "$(dirname "$target_config")"
+          install -m 0644 "$source_config" "$target_config"
+
+          git add -- "$target_config"
+          if git diff --cached --quiet -- "$target_config"; then
+            echo '配置没有变化，无需提交'
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git commit -m "ci: update ImmortalWrt R3S build config"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
   publish_release:
     name: 发布 GitHub Release
     needs: build
