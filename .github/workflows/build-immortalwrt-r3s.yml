@@ -109,11 +109,8 @@ jobs:
 
       - name: 开启 SSH 调试会话
         if: (github.event_name == 'workflow_dispatch' && inputs.ssh == true) || (github.event_name == 'repository_dispatch' && github.event.action == 'ssh')
-        uses: mxschmitt/action-tmate@v3
+        uses: owenthereal/action-upterm@v1
         timeout-minutes: 40
-        with:
-          limit-access-to-actor: true
-          detached: true
 
       - name: 编译固件和应用包
         working-directory: openwrt
