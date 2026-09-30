@@ -129,16 +129,17 @@ fi
 echo "应用配置更改..."
 
 # Nikki feed 提供 mihomo-alpha 和 mihomo-meta 两个互斥变体；同时加入 Kconfig
-# 会形成循环依赖。保留默认的 mihomo-meta，移除 alpha 变体的 package 链接。
-if [ -L "package/feeds/nikki/mihomo-alpha" ]; then
-    rm -f "package/feeds/nikki/mihomo-alpha"
+# 会形成循环依赖。保留 mihomo-meta，移除 alpha 变体的 package 链接/目录。
+MIHOMO_ALPHA_PATH="package/feeds/nikki/mihomo-alpha"
+if [ -e "$MIHOMO_ALPHA_PATH" ] || [ -L "$MIHOMO_ALPHA_PATH" ]; then
+    rm -rf "$MIHOMO_ALPHA_PATH"
     echo "已移除互斥的 mihomo-alpha，使用 mihomo-meta"
+else
+    echo "mihomo-alpha feed 链接不存在，无需移除"
 fi
 
-if ! make defconfig; then
-    echo "错误：make defconfig 失败"
-    exit 1
-fi
+# make defconfig 由工作流紧接着的配置步骤执行，避免在此处重复规范化配置。
+echo "应用包选项完成；目标配置将在工作流的 make defconfig 步骤中规范化。"
 
 # ===== 显示最终统计 =====
 echo "最终配置统计:"
