@@ -30,7 +30,7 @@ if [ -f ".config" ]; then
 else
     echo "[✗] 警告：配置文件不存在"
     echo "创建基础配置..."
-    make defconfig
+    : > .config
 fi
 
 # ===== 检查自定义设置应用状态 =====
@@ -111,6 +111,7 @@ fi
 set_package_enabled luci-compat
 set_package_enabled luci-app-store
 set_package_enabled luci-app-nikki
+set_package_enabled mihomo-meta
 set_package_enabled luci-app-momo
 set_package_enabled luci-app-adguardhome
 set_package_enabled luci-app-passwall2
@@ -126,7 +127,18 @@ fi
 
 # ===== 应用配置更改 =====
 echo "应用配置更改..."
-make defconfig
+
+# Nikki feed 提供 mihomo-alpha 和 mihomo-meta 两个互斥变体；同时加入 Kconfig
+# 会形成循环依赖。保留默认的 mihomo-meta，移除 alpha 变体的 package 链接。
+if [ -L "package/feeds/nikki/mihomo-alpha" ]; then
+    rm -f "package/feeds/nikki/mihomo-alpha"
+    echo "已移除互斥的 mihomo-alpha，使用 mihomo-meta"
+fi
+
+if ! make defconfig; then
+    echo "错误：make defconfig 失败"
+    exit 1
+fi
 
 # ===== 显示最终统计 =====
 echo "最终配置统计:"
