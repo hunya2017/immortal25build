@@ -13,6 +13,11 @@ on:
         required: false
         default: false
         type: boolean
+      CACHE_BUILD:
+        description: 启用编译缓存
+        required: false
+        default: true
+        type: boolean
       UPLOAD_FIRMWARE:
         description: 上传固件
         required: true
@@ -28,6 +33,11 @@ on:
         required: false
         default: true
         type: boolean
+      UPLOAD_RELEASE:
+        description: 发布固件到 GitHub Releases
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -39,11 +49,13 @@ env:
   CONFIG_FILE: config/immortalwrt.info
   DIY_P1_SH: smpackage/immortalwrt-all-1.sh
   DIY_P2_SH: smpackage/immortalwrt-all-2.sh
+  SETTINGS_PATCH: smpackage/settings.patch
   FIRMWARE_NAME: immortalwrt-r3s
 
 jobs:
   build:
     name: Build ImmortalWrt for NanoPi R3S
+    if: github.event_name != 'watch' || github.actor == github.repository_owner
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:
@@ -121,6 +133,57 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      - name: 应用 ImmortalWrt 默认设置
+        env:
+          SETTINGS_PATCH: ${{ github.workspace }}/${{ env.SETTINGS_PATCH }}
+        working-directory: openwrt
+        run: |
+          target="package/emortal/default-settings/files/99-default-settings"
+          if [ ! -f "$SETTINGS_PATCH" ]; then
+            echo "未找到自定义设置脚本，跳过：$SETTINGS_PATCH"
+            exit 0
+          fi
+          if [ ! -f "$target" ]; then
+            echo "错误：ImmortalWrt 默认设置脚本不存在：$target"
+            exit 1
+          fi
+          python3 - "$target" "$SETTINGS_PATCH" <<'PY'
+          import pathlib
+          import sys
+
+          target = pathlib.Path(sys.argv[1])
+          custom = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+          source = target.read_text(encoding="utf-8")
+          marker = "# === 自定义设置开始 ==="
+          if marker in source:
+              print("默认设置中已存在自定义设置，跳过重复注入")
+              raise SystemExit(0)
+          if "exit 0" not in source:
+              raise SystemExit("默认设置脚本中未找到 exit 0，无法安全注入")
+          source = source.replace(
+              "exit 0",
+              f"\n{custom.rstrip()}\n\nexit 0",
+              1,
+          )
+          target.write_text(source, encoding="utf-8")
+          print(f"已将自定义设置注入 {target}")
+          PY
+
+      - name: 准备编译缓存目录
+        run: mkdir -p openwrt/dl openwrt/.ccache
+
+      - name: 恢复编译缓存
+        if: github.event_name != 'workflow_dispatch' || inputs.CACHE_BUILD == true
+        uses: actions/cache@v4
+        with:
+          path: |
+            openwrt/dl
+            openwrt/.ccache
+          key: immortalwrt-25.12-r3s-${{ hashFiles('smpackage/immortalwrt-all-1.sh', 'smpackage/immortalwrt-all-2.sh', 'config/immortalwrt.info') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            immortalwrt-25.12-r3s-${{ hashFiles('smpackage/immortalwrt-all-1.sh', 'smpackage/immortalwrt-all-2.sh', 'config/immortalwrt.info') }}-
+            immortalwrt-25.12-r3s-
+
       - name: 设置 NanoPi R3S 编译配置
         run: |
           if [ -f previous-buildinfo/immortalwrt-r3s.config ]; then
@@ -154,6 +217,7 @@ jobs:
           CONFIG_TARGET_BOARD="rockchip"
           CONFIG_TARGET_SUBTARGET="armv8"
           CONFIG_TARGET_PROFILE="DEVICE_friendlyarm_nanopi-r3s"
+          CONFIG_CCACHE=y
           EOF
           make defconfig
           grep -q '^CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' .config || {
@@ -192,6 +256,12 @@ jobs:
           else
             echo 'No APK application packages were generated.'
           fi
+          mkdir -p artifact/release
+          cp -a artifact/firmware/. artifact/release/
+          if compgen -G 'artifact/immortalwrt-r3s-apk-packages-*.tar.gz' > /dev/null; then
+            cp artifact/immortalwrt-r3s-apk-packages-*.tar.gz artifact/release/
+          fi
+          (cd artifact/release && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > artifact/release/SHA256SUMS
 
       - name: 上传固件
         if: success() && (github.event_name != 'workflow_dispatch' || inputs.UPLOAD_FIRMWARE == true)
@@ -219,3 +289,43 @@ jobs:
           path: openwrt/artifact/buildinfo/*
           if-no-files-found: warn
           retention-days: 90
+
+      - name: 保存 Release 文件
+        if: success() && github.event_name == 'workflow_dispatch' && inputs.UPLOAD_RELEASE == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-r3s-release-${{ github.run_id }}
+          path: openwrt/artifact/release/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish_release:
+    name: 发布 GitHub Release
+    needs: build
+    if: success() && github.event_name == 'workflow_dispatch' && inputs.UPLOAD_RELEASE == true
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: 下载 Release 文件
+        uses: actions/download-artifact@v4
+        with:
+          name: immortalwrt-r3s-release-${{ github.run_id }}
+          path: release-files
+
+      - name: 发布到 GitHub Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ImmortalWrt R3S ${{ github.run_number }}-${{ github.run_attempt }}
+          tag_name: immortalwrt-r3s-${{ github.run_number }}-${{ github.run_attempt }}
+          body: |
+            ImmortalWrt 25.12 for FriendlyElec NanoPi R3S.
+
+            Build date: ${{ github.run_started_at }}
+            Firmware and APK package archive are attached. SHA256SUMS contains checksums.
+
+            Set a strong root password on first login.
+          files: release-files/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true

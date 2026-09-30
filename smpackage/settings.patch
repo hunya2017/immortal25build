@@ -21,7 +21,8 @@ fi
 echo "开始应用自定义设置..."
 
 # 定义默认值
-root_password="password"
+# 不在固件中预置 root 密码；首次登录后请自行设置强密码。
+root_password=""
 lan_ip_address="192.168.8.1"
 
 # PPPoE 手动配置账号密码（如需自动配置请使用环境变量）
