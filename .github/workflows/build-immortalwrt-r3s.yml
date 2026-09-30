@@ -113,6 +113,7 @@ jobs:
         timeout-minutes: 40
         with:
           limit-access-to-actor: true
+          detached: true
 
       - name: 编译固件和应用包
         working-directory: openwrt
