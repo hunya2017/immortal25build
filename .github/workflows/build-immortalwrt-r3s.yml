@@ -23,9 +23,15 @@ on:
         required: true
         default: true
         type: boolean
+      USE_PREVIOUS_CONFIG:
+        description: 复用上一次成功编译的配置
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: read
+  actions: read
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
@@ -43,6 +49,53 @@ jobs:
     steps:
       - name: 检出配置仓库
         uses: actions/checkout@v4
+
+      - name: 查找上一次成功编译的配置
+        id: previous-config
+        if: github.event_name != 'workflow_dispatch' || inputs.USE_PREVIOUS_CONFIG == true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const workflowId = 'build-immortalwrt-r3s.yml';
+            const { data: runs } = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: workflowId,
+              branch: context.ref_name,
+              status: 'success',
+              per_page: 20
+            });
+
+            for (const run of runs.workflow_runs) {
+              if (run.id === context.runId) continue;
+              const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id,
+                per_page: 100
+              });
+              const configArtifact = data.artifacts.find(artifact =>
+                /^immortalwrt-r3s-buildinfo(?:-|$)/.test(artifact.name) && !artifact.expired
+              );
+              if (configArtifact) {
+                core.setOutput('run_id', String(run.id));
+                core.setOutput('artifact_name', configArtifact.name);
+                core.info(`将复用运行 ${run.id} 的编译配置`);
+                return;
+              }
+            }
+
+            core.info('没有找到可复用的成功编译配置，将使用仓库内配置或空配置');
+
+      - name: 下载上一次成功编译的配置
+        if: steps.previous-config.outputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.previous-config.outputs.artifact_name }}
+          path: previous-buildinfo
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.previous-config.outputs.run_id }}
+          github-token: ${{ github.token }}
 
       - name: 安装编译依赖
         run: |
@@ -70,8 +123,12 @@ jobs:
 
       - name: 设置 NanoPi R3S 编译配置
         run: |
-          if [ -f "$CONFIG_FILE" ]; then
+          if [ -f previous-buildinfo/immortalwrt-r3s.config ]; then
+            cp previous-buildinfo/immortalwrt-r3s.config openwrt/.config
+            echo "已载入上一次成功编译的 .config"
+          elif [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
+            echo "已载入仓库中的 $CONFIG_FILE"
           else
             : > openwrt/.config
             echo "未找到 $CONFIG_FILE，已创建空 .config"
@@ -111,6 +168,8 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' && inputs.ssh == true) || (github.event_name == 'repository_dispatch' && github.event.action == 'ssh')
         uses: owenthereal/action-upterm@v1
         timeout-minutes: 40
+        with:
+          limit-access-to-actor: true
 
       - name: 编译固件和应用包
         working-directory: openwrt
@@ -156,7 +215,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-r3s-buildinfo-${{ env.BUILD_DATE }}
+          name: immortalwrt-r3s-buildinfo
           path: openwrt/artifact/buildinfo/*
           if-no-files-found: warn
-          retention-days: 30
+          retention-days: 90
