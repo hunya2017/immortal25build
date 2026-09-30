@@ -1,0 +1,217 @@
+#!/bin/bash
+
+# ImmortalWrt 编译前自定义脚本 1
+# 在更新 feeds 之前执行
+
+echo "=== ImmortalWrt 编译前自定义脚本 1 开始执行 ==="
+
+# 显示当前工作目录和基本信息
+echo "当前目录：$(pwd)"
+echo "系统信息：$(uname -a)"
+echo "编译开始时间：$(date)"
+
+# ===== 修改默认 feeds 源 =====
+echo "检查和修改 feeds 配置..."
+
+if [ -f "feeds.conf.default" ]; then
+    echo "原始 feeds.conf.default 内容:"
+    cat feeds.conf.default
+    
+    # 备份原始配置
+    cp feeds.conf.default feeds.conf.default.bak
+    
+    # 可以在这里添加自定义 feeds 源
+    # echo 'src-git custom https://github.com/your-username/your-packages.git' >> feeds.conf.default
+    
+    echo "修改后的 feeds.conf.default 内容:"
+    cat feeds.conf.default
+else
+    echo "警告：feeds.conf.default 文件不存在"
+fi
+
+# ===== 修改版本信息 =====
+echo "修改版本信息..."
+
+# 查找版本文件
+VERSION_FILE=""
+if [ -f "package/lean/default-settings/files/zzz-default-settings" ]; then
+    VERSION_FILE="package/lean/default-settings/files/zzz-default-settings"
+elif [ -f "package/emortal/default-settings/files/zzz-default-settings" ]; then
+    VERSION_FILE="package/emortal/default-settings/files/zzz-default-settings"
+elif [ -f "package/base-files/files/etc/banner" ]; then
+    VERSION_FILE="package/base-files/files/etc/banner"
+fi
+
+if [ -n "$VERSION_FILE" ] && [ -f "$VERSION_FILE" ]; then
+    echo "找到版本文件：$VERSION_FILE"
+    # 可以在这里修改版本信息
+    # sed -i 's/original-version/custom-version/g' "$VERSION_FILE"
+else
+    echo "未找到版本文件"
+fi
+
+# ===== 注册自定义软件源 =====
+echo "注册自定义软件源..."
+
+add_feed() {
+    local feed_name="$1"
+    local feed_url="$2"
+
+    if ! grep -Eq "^src-git[[:space:]]+${feed_name}[[:space:]]" feeds.conf.default; then
+        printf 'src-git %s %s\n' "$feed_name" "$feed_url" >> feeds.conf.default
+        echo "已添加 feed：$feed_name"
+    else
+        echo "feed 已存在：$feed_name"
+    fi
+}
+
+if [ -f "feeds.conf.default" ]; then
+    add_feed istore "https://github.com/linkease/istore.git;main"
+    add_feed nikki "https://github.com/nikkinikki-org/OpenWrt-nikki.git;main"
+    add_feed momo "https://github.com/nikkinikki-org/OpenWrt-momo.git;main"
+    add_feed passwall2 "https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main"
+    add_feed passwall_packages "https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main"
+else
+    echo "错误：feeds.conf.default 不存在，无法添加自定义软件源"
+    exit 1
+fi
+
+# 该仓库本身就是单个 OpenWrt 包，按其说明直接放入 package 目录；当前维护分支为 dev。
+if [ ! -d "package/luci-app-adguardhome" ]; then
+    git clone --depth 1 --branch dev \
+        https://github.com/stevenjoezhang/luci-app-adguardhome.git \
+        package/luci-app-adguardhome || {
+        echo "错误：AdGuardHome 插件仓库克隆失败"
+        exit 1
+    }
+fi
+
+
+
+
+# ===== 修改目标架构配置 =====
+echo "检查目标架构配置..."
+
+# 显示可用的目标架构
+if [ -d "target/linux" ]; then
+    echo "可用的目标架构:"
+    find target/linux -maxdepth 1 -mindepth 1 -type d -printf '%f\n'
+fi
+
+# ===== 预处理配置文件 =====
+echo "预处理配置..."
+
+# 如果存在预设配置文件，可以在这里进行预处理
+if [ -f "../config/immortalwrt.info" ]; then
+    echo "发现预设配置文件"
+    # 可以在这里对配置文件进行预处理
+fi
+
+# ===== 设置编译环境变量 =====
+echo "设置编译环境变量..."
+
+# 设置编译线程数
+export FORCE_UNSAFE_CONFIGURE=1
+
+# 设置编译优化选项
+MAKEFLAGS="-j$(nproc)"
+export MAKEFLAGS
+
+# ===== 显示系统资源信息 =====
+echo "显示系统资源信息..."
+echo "CPU 信息:"
+nproc
+echo "内存信息:"
+free -h
+echo "磁盘空间:"
+df -h
+
+# ===== 清理可能的冲突 =====
+echo "清理可能的编译冲突..."
+
+# 清理可能存在的临时文件
+rm -rf tmp/ 2>/dev/null || true
+rm -rf .config.old 2>/dev/null || true
+
+# ===== 检查必要的工具 =====
+echo "检查编译必要工具..."
+
+REQUIRED_TOOLS=("git" "gcc" "make" "python3" "wget" "curl")
+MISSING_TOOLS=()
+
+for tool in "${REQUIRED_TOOLS[@]}"; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        echo "[✓] $tool: $(command -v "$tool")"
+    else
+        echo "[✗] $tool: 未找到"
+        MISSING_TOOLS+=("$tool")
+    fi
+done
+
+# 如果有缺失的工具，显示警告
+if [ ${#MISSING_TOOLS[@]} -gt 0 ]; then
+    echo ""
+    echo "[警告] 以下工具未安装：${MISSING_TOOLS[*]}"
+    echo "请确保这些工具已正确安装，否则编译可能会失败"
+fi
+
+# ===== 创建自定义目录结构 =====
+echo "创建自定义目录结构..."
+
+# 创建可能需要的目录
+mkdir -p files/etc/config 2>/dev/null || true
+mkdir -p files/etc/init.d 2>/dev/null || true
+mkdir -p files/usr/bin 2>/dev/null || true
+
+# ===== 下载额外资源 =====
+echo "下载额外资源..."
+
+# 示例：下载自定义主题或插件
+# wget -O package/custom-theme.tar.gz https://github.com/username/theme/archive/main.tar.gz
+# tar -xzf package/custom-theme.tar.gz -C package/
+
+# ===== 应用预设补丁 =====
+echo "应用预设补丁..."
+
+# 这里可以应用一些通用的补丁
+# 例如修复已知问题或添加功能
+
+# ===== 验证源码完整性 =====
+echo "验证源码完整性..."
+
+if [ -f "Makefile" ] && [ -d "package" ] && [ -d "target" ]; then
+    echo "[✓] 源码结构正常"
+else
+    echo "[警告] 源码结构可能不完整"
+fi
+
+# ===== 记录脚本执行信息 =====
+SCRIPT1_LOG="build_script1.log"
+cat > "$SCRIPT1_LOG" << EOF
+ImmortalWrt 编译脚本 1 执行记录
+============================
+执行时间：$(date)
+工作目录：$(pwd)
+系统信息：$(uname -a)
+CPU 核心数：$(nproc)
+内存信息：$(free -h | grep Mem)
+磁盘空间：$(df -h . | tail -1)
+
+执行的操作:
+- 检查 feeds 配置
+- 修改版本信息
+- 设置环境变量
+- 清理临时文件
+- 验证工具
+- 创建目录结构
+
+脚本状态：执行完成
+============================
+EOF
+
+echo "脚本 1 执行日志已保存到：$SCRIPT1_LOG"
+
+echo "=== ImmortalWrt 编译前自定义脚本 1 执行完成 ==="
+echo ""
+
+exit 0

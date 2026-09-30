@@ -1,0 +1,155 @@
+name: immortalwrt-r3s
+
+on:
+  schedule:
+    - cron: '0 18 * * 5' # 每周五北京时间凌晨 2 点
+  watch:
+    types: [started]
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 启动 SSH 调试会话
+        required: false
+        default: false
+        type: boolean
+      UPLOAD_FIRMWARE:
+        description: 上传固件
+        required: true
+        default: true
+        type: boolean
+      UPLOAD_APP:
+        description: 上传应用包（APK）
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  REPO_URL: https://github.com/immortalwrt/immortalwrt
+  REPO_BRANCH: openwrt-25.12
+  CONFIG_FILE: config/immortalwrt.info
+  DIY_P1_SH: smpackage/immortalwrt-all-1.sh
+  DIY_P2_SH: smpackage/immortalwrt-all-2.sh
+  FIRMWARE_NAME: immortalwrt-r3s
+
+jobs:
+  build:
+    name: Build ImmortalWrt for NanoPi R3S
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    steps:
+      - name: 检出配置仓库
+        uses: actions/checkout@v4
+
+      - name: 安装编译依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip zlib1g-dev file wget ccache
+
+      - name: 设置编译时间
+        run: echo "BUILD_DATE=$(date -u +'%Y%m%d-%H%M')" >> "$GITHUB_ENV"
+
+      - name: 下载 ImmortalWrt 源码
+        run: git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" openwrt
+
+      - name: 执行自定义脚本一
+        run: |
+          if [ -f "$DIY_P1_SH" ]; then
+            chmod +x "$DIY_P1_SH"
+            (cd openwrt && "$GITHUB_WORKSPACE/$DIY_P1_SH")
+          fi
+
+      - name: 更新并安装软件源
+        working-directory: openwrt
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: 设置 NanoPi R3S 编译配置
+        run: |
+          if [ -f "$CONFIG_FILE" ]; then
+            cp "$CONFIG_FILE" openwrt/.config
+          else
+            cat > openwrt/.config <<'EOF'
+          CONFIG_TARGET_rockchip=y
+          CONFIG_TARGET_rockchip_armv8=y
+          CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-base=y
+          EOF
+          fi
+          if [ -f "$DIY_P2_SH" ]; then
+            chmod +x "$DIY_P2_SH"
+            (cd openwrt && "$GITHUB_WORKSPACE/$DIY_P2_SH")
+          fi
+          grep -q '^CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' openwrt/.config || {
+            echo 'The configuration must select the FriendlyElec NanoPi R3S target.'
+            exit 1
+          }
+
+      - name: 更新配置并下载源码包
+        working-directory: openwrt
+        run: |
+          make defconfig
+          grep -q '^CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' .config
+          make download -j"$(nproc)"
+          find dl -size -1024c -print -delete
+
+      - name: 开启 SSH 调试会话
+        if: (github.event_name == 'workflow_dispatch' && inputs.ssh == true) || (github.event_name == 'repository_dispatch' && github.event.action == 'ssh')
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 40
+        with:
+          limit-access-to-actor: true
+
+      - name: 编译固件和应用包
+        working-directory: openwrt
+        run: |
+          echo "CPU threads: $(nproc)"
+          make -j"$(nproc)" || make -j1 V=s
+          test -d bin/targets || { echo 'No firmware output was generated'; exit 1; }
+
+      - name: 整理固件和 APK 应用包
+        working-directory: openwrt
+        run: |
+          mkdir -p artifact/firmware artifact/buildinfo
+          find bin/targets -type f \( -name '*.bin' -o -name '*.img' -o -name '*.gz' -o -name '*.itb' -o -name '*.manifest' -o -name '*.buildinfo' \) -not -path '*/packages/*' -exec cp -t artifact/firmware {} +
+          cp .config artifact/buildinfo/immortalwrt-r3s.config
+          cp feeds.conf.default artifact/buildinfo/
+          mkdir -p artifact/apps
+          find bin/packages bin/targets -type f -name '*.apk' -exec cp -t artifact/apps {} + 2>/dev/null || true
+          if [ -d artifact/apps ] && [ -n "$(find artifact/apps -type f -print -quit)" ]; then
+            tar -czf artifact/immortalwrt-r3s-apk-packages-${BUILD_DATE}.tar.gz -C artifact/apps .
+          else
+            echo 'No APK application packages were generated.'
+          fi
+
+      - name: 上传固件
+        if: success() && (github.event_name != 'workflow_dispatch' || inputs.UPLOAD_FIRMWARE == true)
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-r3s-firmware-${{ env.BUILD_DATE }}
+          path: openwrt/artifact/firmware/*
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: 上传应用包（APK）
+        if: success() && (github.event_name != 'workflow_dispatch' || inputs.UPLOAD_APP == true)
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-r3s-apk-packages-${{ env.BUILD_DATE }}
+          path: openwrt/artifact/immortalwrt-r3s-apk-packages-*.tar.gz
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: 上传编译配置
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: immortalwrt-r3s-buildinfo-${{ env.BUILD_DATE }}
+          path: openwrt/artifact/buildinfo/*
+          if-no-files-found: warn
+          retention-days: 30
