@@ -33,49 +33,40 @@ else
     : > .config
 fi
 
-# ===== 检查自定义设置应用状态 =====
-echo "检查自定义设置应用状态..."
-
-if [ -d "package/emortal/default-settings" ]; then
-    cd package/emortal/default-settings || exit 1
-    
-    echo "检查 Makefile 修改:"
-    if grep -q "my-default-settings" Makefile 2>/dev/null; then
-        echo "[✓] Makefile 包含自定义设置包"
-        grep -A3 -B1 "my-default-settings" Makefile
-    else
-        echo "[✗] Makefile 未包含自定义设置包"
-    fi
-    
-    echo "检查自定义设置文件:"
-    if [ -f "files/99-my-default-settings" ]; then
-        echo "[✓] 自定义设置文件存在"
-        echo "文件大小：$(wc -l < files/99-my-default-settings) 行"
-        echo "文件权限：$(stat -c '%A' files/99-my-default-settings 2>/dev/null || stat -f '%Sp' files/99-my-default-settings 2>/dev/null)"
-        
-        echo "自定义设置内容预览:"
-        echo "----------------------------------------"
-        head -20 files/99-my-default-settings
-        echo "----------------------------------------"
-    else
-        echo "[✗] 自定义设置文件不存在"
-    fi
-    
-    echo "检查默认设置文件:"
-    if [ -f "files/99-default-settings" ]; then
-        echo "[✓] 默认设置文件存在"
-        echo "默认设置文件内容预览:"
-        echo "----------------------------------------"
-        head -10 files/99-default-settings
-        echo "----------------------------------------"
-    else
-        echo "[✗] 默认设置文件不存在"
-    fi
-    
-    cd - >/dev/null || exit 1
-else
-    echo "[✗] default-settings 目录不存在"
-fi
+# ===== 检查自定义设置应用状态（暂时注释） =====
+# echo "检查自定义设置应用状态..."
+# if [ -d "package/emortal/default-settings" ]; then
+#     cd package/emortal/default-settings || exit 1
+#     echo "检查 Makefile 修改:"
+#     if grep -q "my-default-settings" Makefile 2>/dev/null; then
+#         echo "[✓] Makefile 包含自定义设置包"
+#         grep -A3 -B1 "my-default-settings" Makefile
+#     else
+#         echo "[✗] Makefile 未包含自定义设置包"
+#     fi
+#     echo "检查自定义设置文件:"
+#     if [ -f "files/99-my-default-settings" ]; then
+#         echo "[✓] 自定义设置文件存在"
+#         echo "文件大小：$(wc -l < files/99-my-default-settings) 行"
+#         echo "文件权限：$(stat -c '%A' files/99-my-default-settings 2>/dev/null || stat -f '%Sp' files/99-my-default-settings 2>/dev/null)"
+#         echo "自定义设置内容预览:"
+#         echo "----------------------------------------"
+#         head -20 files/99-my-default-settings
+#         echo "----------------------------------------"
+#     else
+#         echo "[✗] 自定义设置文件不存在"
+#     fi
+#     echo "检查默认设置文件:"
+#     if [ -f "files/99-default-settings" ]; then
+#         echo "[✓] 默认设置文件存在"
+#         head -10 files/99-default-settings
+#     else
+#         echo "[✗] 默认设置文件不存在"
+#     fi
+#     cd - >/dev/null || exit 1
+# else
+#     echo "[✗] default-settings 目录不存在"
+# fi
 
 # ===== 最终配置调整 =====
 echo "最终配置调整..."
@@ -127,13 +118,13 @@ set_package_enabled luci-app-adguardhome
 set_package_enabled luci-app-passwall2
 set_package_enabled luci-app-passwall2_Nftables_Transparent_Proxy
 
-# 如果自定义设置包存在，确保其启用
-if [ -f "package/emortal/default-settings/Makefile" ] && grep -q "my-default-settings" package/emortal/default-settings/Makefile; then
-    if ! grep -q "CONFIG_PACKAGE_my-default-settings=y" .config; then
-        echo "CONFIG_PACKAGE_my-default-settings=y" >> .config
-        echo "[✓] 启用自定义默认设置包"
-    fi
-fi
+# 暂时不查找或启用 my-default-settings 自定义包。
+# if [ -f "package/emortal/default-settings/Makefile" ] && grep -q "my-default-settings" package/emortal/default-settings/Makefile; then
+#     if ! grep -q "CONFIG_PACKAGE_my-default-settings=y" .config; then
+#         echo "CONFIG_PACKAGE_my-default-settings=y" >> .config
+#         echo "[✓] 启用自定义默认设置包"
+#     fi
+# fi
 
 # ===== 应用配置更改 =====
 echo "应用配置更改..."
@@ -164,14 +155,14 @@ echo "中文支持：$(grep -c 'CONFIG_PACKAGE_luci-i18n.*zh-cn=y' .config) 个�
 echo "主题数量：$(grep -c 'CONFIG_PACKAGE_luci-theme.*=y' .config) 个主题"
 echo "应用数量：$(grep -c 'CONFIG_PACKAGE_luci-app.*=y' .config) 个应用"
 
-# 检查自定义设置
-if grep -q "CONFIG_PACKAGE_my-default-settings=y" .config; then
-    echo "自定义设置：[✓] 已启用"
-elif grep -q "CONFIG_PACKAGE_default-settings=y" .config; then
-    echo "自定义设置：[✓] 使用默认设置"
-else
-    echo "自定义设置：[✗] 未找到设置包"
-fi
+# 自定义设置状态检查暂时注释。
+# if grep -q "CONFIG_PACKAGE_my-default-settings=y" .config; then
+#     echo "自定义设置：[✓] 已启用"
+# elif grep -q "CONFIG_PACKAGE_default-settings=y" .config; then
+#     echo "自定义设置：[✓] 使用默认设置"
+# else
+#     echo "自定义设置：[✗] 未找到设置包"
+# fi
 echo "----------------------------------------"
 
 # ===== 预编译检查 =====
@@ -276,7 +267,7 @@ ImmortalWrt 编译脚本 2 执行记录
 配置统计:
 - 总配置项：$(wc -l < .config)
 - 启用包数：$(grep -c "=y$" .config)
-- 自定义设置：$(grep "my-default-settings" .config >/dev/null && echo "已启用" || echo "未启用")
+# 自定义设置状态检查暂时关闭
 
 脚本状态：执行完成
 ============================
