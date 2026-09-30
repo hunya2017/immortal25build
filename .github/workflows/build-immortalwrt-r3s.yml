@@ -73,13 +73,8 @@ jobs:
           if [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
           else
-            cat > openwrt/.config <<'EOF'
-          CONFIG_TARGET_rockchip=y
-          CONFIG_TARGET_rockchip_armv8=y
-          CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y
-          CONFIG_PACKAGE_luci=y
-          CONFIG_PACKAGE_luci-base=y
-          EOF
+            : > openwrt/.config
+            echo "未找到 $CONFIG_FILE，已创建空 .config"
           fi
           if [ -f "$DIY_P2_SH" ]; then
             chmod +x "$DIY_P2_SH"
