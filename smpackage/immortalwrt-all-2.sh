@@ -107,7 +107,7 @@ set_package_enabled() {
 # 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
 set_config_enabled CONFIG_TARGET_rockchip "rockchip 目标"
 set_config_enabled CONFIG_TARGET_rockchip_armv8 "rockchip armv8 目标"
-set_config_enabled CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s "FriendlyElec NanoPi R3S 设备"
+set_config_enabled CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s "FriendlyElec NanoPi R3S 设备"
 
 # LuCI、中文界面和主题
 set_package_enabled luci

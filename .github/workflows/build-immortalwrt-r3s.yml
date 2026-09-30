@@ -80,7 +80,7 @@ jobs:
             chmod +x "$DIY_P2_SH"
             (cd openwrt && "$GITHUB_WORKSPACE/$DIY_P2_SH")
           fi
-          grep -q '^CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' openwrt/.config || {
+          grep -q '^CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' openwrt/.config || {
             echo 'The configuration must select the FriendlyElec NanoPi R3S target.'
             exit 1
           }
@@ -93,13 +93,13 @@ jobs:
           cat >> .config <<'EOF'
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
-          CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y
+          CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y
           CONFIG_TARGET_BOARD="rockchip"
           CONFIG_TARGET_SUBTARGET="armv8"
           CONFIG_TARGET_PROFILE="DEVICE_friendlyarm_nanopi-r3s"
           EOF
           make defconfig
-          grep -q '^CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' .config || {
+          grep -q '^CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' .config || {
             echo 'make defconfig removed the NanoPi R3S profile; target configuration is invalid.'
             grep '^CONFIG_TARGET_' .config | head -30
             exit 1
