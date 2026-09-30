@@ -55,7 +55,7 @@ env:
 jobs:
   build:
     name: Build ImmortalWrt for NanoPi R3S
-    if: github.event_name != 'watch' || github.actor == github.repository_owner
+    if: (github.event_name != 'watch' && github.event_name != 'repository_dispatch') || github.actor == github.repository_owner
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     steps:
