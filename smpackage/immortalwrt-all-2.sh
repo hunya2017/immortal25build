@@ -104,7 +104,7 @@ DEVICE_NAME="${DEVICE_NAME:-FriendlyElec NanoPi R3S}"
 # 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
 set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}" "${TARGET_BOARD} 目标"
 set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}" "${TARGET_BOARD} ${TARGET_SUBTARGET} 目标"
-set_config_enabled "CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}" "${DEVICE_NAME} 设备"
+set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}" "${DEVICE_NAME} 设备"
 
 # LuCI、中文界面和主题
 set_package_enabled luci

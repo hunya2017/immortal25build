@@ -258,7 +258,7 @@ jobs:
             chmod +x "$DIY_P2_SH"
             (cd openwrt && "$GITHUB_WORKSPACE/$DIY_P2_SH")
           fi
-          device_config="CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
+          device_config="CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
           grep -Fqx "$device_config" openwrt/.config || {
             echo "The configuration must select ${DEVICE_NAME}."
             exit 1
@@ -272,14 +272,14 @@ jobs:
           cat >> .config <<EOF
           CONFIG_TARGET_${TARGET_BOARD}=y
           CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}=y
-          CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y
+          CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y
           CONFIG_TARGET_BOARD="${TARGET_BOARD}"
           CONFIG_TARGET_SUBTARGET="${TARGET_SUBTARGET}"
           CONFIG_TARGET_PROFILE="${TARGET_PROFILE}"
           CONFIG_CCACHE=y
           EOF
           make defconfig
-          device_config="CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
+          device_config="CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
           grep -Fqx "$device_config" .config || {
             echo "make defconfig removed the ${DEVICE_NAME} profile; target configuration is invalid."
             grep '^CONFIG_TARGET_' .config | head -30
@@ -389,10 +389,10 @@ jobs:
             test -s "$source_config" || { echo "编译配置文件为空或不存在：$source_config"; exit 1; }
             case "$slug" in
               r3s)
-                expected='CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y'
+                expected='CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y'
                 ;;
               ax6000-stock)
-                expected='CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_xiaomi_redmi-router-ax6000-stock=y'
+                expected='CONFIG_TARGET_mediatek_filogic_DEVICE_xiaomi_redmi-router-ax6000-stock=y'
                 ;;
             esac
             grep -Fqx "$expected" "$source_config" || {
