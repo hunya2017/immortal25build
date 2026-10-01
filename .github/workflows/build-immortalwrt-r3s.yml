@@ -133,6 +133,26 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
+      - name: 从 APK 软件源列表排除不可用源
+        working-directory: openwrt
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("include/feeds.mk")
+          source = path.read_text(encoding="utf-8")
+          start = source.index("define FeedSourcesAppendAPK")
+          end = source.index("\nendef", start)
+          block = source[start:end]
+          old = "$(foreach feed,$(FEEDS_AVAILABLE),"
+          new = "$(foreach feed,$(filter-out istore nikki momo passwall2 passwall_packages,$(FEEDS_AVAILABLE)),"
+          if block.count(old) != 1:
+              raise SystemExit("无法唯一定位 APK feed 列表生成逻辑，停止修改")
+          source = source[:start] + block.replace(old, new, 1) + source[end:]
+          path.write_text(source, encoding="utf-8")
+          print("已从固件 APK 在线源列表排除 5 个自定义源，编译 feed 保持不变")
+          PY
+
       - name: 应用 ImmortalWrt 默认设置
         env:
           SETTINGS_PATCH: ${{ github.workspace }}/${{ env.SETTINGS_PATCH }}
