@@ -229,6 +229,18 @@ jobs:
             immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-all-1.sh', 'smpackage/immortalwrt-all-2.sh', matrix.config_file) }}-
             immortalwrt-25.12-${{ matrix.slug }}-
 
+      - name: 清理损坏的 protobuf Go 模块缓存
+        working-directory: openwrt
+        run: |
+          module_cache="dl/go-mod-cache"
+          if [ -d "$module_cache" ]; then
+            rm -rf "$module_cache/google.golang.org/protobuf@"* \
+              "$module_cache/cache/download/google.golang.org/protobuf/@v"
+            echo "已清理 protobuf 模块缓存，将在编译时重新下载"
+          else
+            echo "未发现 Go 模块缓存，跳过清理"
+          fi
+
       - name: 设置设备编译配置
         run: |
           previous_config="previous-buildinfo/immortalwrt-${DEVICE_SLUG}.config"
