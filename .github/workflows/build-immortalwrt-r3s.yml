@@ -1,4 +1,4 @@
-name: immortalwrt-r3s
+name: ImmortalWrt 多设备编译
 
 on:
   schedule:
@@ -46,18 +46,42 @@ permissions:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-25.12
-  CONFIG_FILE: config/immortalwrt.info
   DIY_P1_SH: smpackage/immortalwrt-all-1.sh
   DIY_P2_SH: smpackage/immortalwrt-all-2.sh
   SETTINGS_PATCH: smpackage/settings.patch
-  FIRMWARE_NAME: immortalwrt-r3s
 
 jobs:
   build:
-    name: Build ImmortalWrt for NanoPi R3S
+    name: Build ImmortalWrt for ${{ matrix.name }}
     if: (github.event_name != 'watch' && github.event_name != 'repository_dispatch') || github.actor == github.repository_owner
     runs-on: ubuntu-22.04
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slug: r3s
+            name: NanoPi R3S
+            config_file: config/immortalwrt-r3s.info
+            target_board: rockchip
+            target_subtarget: armv8
+            target_device: friendlyarm_nanopi-r3s
+            target_profile: DEVICE_friendlyarm_nanopi-r3s
+          - slug: ax6000-stock
+            name: Xiaomi Redmi Router AX6000 stock layout
+            config_file: config/immortalwrt-ax6000-stock.info
+            target_board: mediatek
+            target_subtarget: filogic
+            target_device: xiaomi_redmi-router-ax6000-stock
+            target_profile: DEVICE_xiaomi_redmi-router-ax6000-stock
+    env:
+      DEVICE_SLUG: ${{ matrix.slug }}
+      DEVICE_NAME: ${{ matrix.name }}
+      CONFIG_FILE: ${{ matrix.config_file }}
+      TARGET_BOARD: ${{ matrix.target_board }}
+      TARGET_SUBTARGET: ${{ matrix.target_subtarget }}
+      TARGET_DEVICE: ${{ matrix.target_device }}
+      TARGET_PROFILE: ${{ matrix.target_profile }}
     steps:
       - name: 检出配置仓库
         uses: actions/checkout@v4
@@ -86,8 +110,9 @@ jobs:
                 run_id: run.id,
                 per_page: 100
               });
+              const wantedName = `immortalwrt-${{ matrix.slug }}-buildinfo`;
               const configArtifact = data.artifacts.find(artifact =>
-                /^immortalwrt-r3s-buildinfo(?:-|$)/.test(artifact.name) && !artifact.expired
+                artifact.name === wantedName && !artifact.expired
               );
               if (configArtifact) {
                 core.setOutput('run_id', String(run.id));
@@ -199,15 +224,16 @@ jobs:
           path: |
             openwrt/dl
             openwrt/.ccache
-          key: immortalwrt-25.12-r3s-${{ hashFiles('smpackage/immortalwrt-all-1.sh', 'smpackage/immortalwrt-all-2.sh', 'config/immortalwrt.info') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-all-1.sh', 'smpackage/immortalwrt-all-2.sh', matrix.config_file) }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            immortalwrt-25.12-r3s-${{ hashFiles('smpackage/immortalwrt-all-1.sh', 'smpackage/immortalwrt-all-2.sh', 'config/immortalwrt.info') }}-
-            immortalwrt-25.12-r3s-
+            immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-all-1.sh', 'smpackage/immortalwrt-all-2.sh', matrix.config_file) }}-
+            immortalwrt-25.12-${{ matrix.slug }}-
 
-      - name: 设置 NanoPi R3S 编译配置
+      - name: 设置设备编译配置
         run: |
-          if [ -f previous-buildinfo/immortalwrt-r3s.config ]; then
-            cp previous-buildinfo/immortalwrt-r3s.config openwrt/.config
+          previous_config="previous-buildinfo/immortalwrt-${DEVICE_SLUG}.config"
+          if [ -f "$previous_config" ]; then
+            cp "$previous_config" openwrt/.config
             echo "已载入上一次成功编译的 .config"
           elif [ -f "$CONFIG_FILE" ]; then
             cp "$CONFIG_FILE" openwrt/.config
@@ -220,8 +246,9 @@ jobs:
             chmod +x "$DIY_P2_SH"
             (cd openwrt && "$GITHUB_WORKSPACE/$DIY_P2_SH")
           fi
-          grep -q '^CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' openwrt/.config || {
-            echo 'The configuration must select the FriendlyElec NanoPi R3S target.'
+          device_config="CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
+          grep -Fqx "$device_config" openwrt/.config || {
+            echo "The configuration must select ${DEVICE_NAME}."
             exit 1
           }
 
@@ -230,18 +257,19 @@ jobs:
         run: |
           # make defconfig 需要 profile 字符串与设备选择符一致，避免只写入
           # CONFIG_TARGET_* 布尔值时将设备配置归一化掉。
-          cat >> .config <<'EOF'
-          CONFIG_TARGET_rockchip=y
-          CONFIG_TARGET_rockchip_armv8=y
-          CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y
-          CONFIG_TARGET_BOARD="rockchip"
-          CONFIG_TARGET_SUBTARGET="armv8"
-          CONFIG_TARGET_PROFILE="DEVICE_friendlyarm_nanopi-r3s"
+          cat >> .config <<EOF
+          CONFIG_TARGET_${TARGET_BOARD}=y
+          CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}=y
+          CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y
+          CONFIG_TARGET_BOARD="${TARGET_BOARD}"
+          CONFIG_TARGET_SUBTARGET="${TARGET_SUBTARGET}"
+          CONFIG_TARGET_PROFILE="${TARGET_PROFILE}"
           CONFIG_CCACHE=y
           EOF
           make defconfig
-          grep -q '^CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y$' .config || {
-            echo 'make defconfig removed the NanoPi R3S profile; target configuration is invalid.'
+          device_config="CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
+          grep -Fqx "$device_config" .config || {
+            echo "make defconfig removed the ${DEVICE_NAME} profile; target configuration is invalid."
             grep '^CONFIG_TARGET_' .config | head -30
             exit 1
           }
@@ -267,27 +295,26 @@ jobs:
         run: |
           mkdir -p artifact/firmware artifact/buildinfo
           find bin/targets -type f \( -name '*.bin' -o -name '*.img' -o -name '*.gz' -o -name '*.itb' -o -name '*.manifest' -o -name '*.buildinfo' \) -not -path '*/packages/*' -exec cp -t artifact/firmware {} +
-          cp .config artifact/buildinfo/immortalwrt-r3s.config
+          cp .config "artifact/buildinfo/immortalwrt-${DEVICE_SLUG}.config"
           cp feeds.conf.default artifact/buildinfo/
           mkdir -p artifact/apps
           find bin/packages bin/targets -type f -name '*.apk' -exec cp -t artifact/apps {} + 2>/dev/null || true
           if [ -d artifact/apps ] && [ -n "$(find artifact/apps -type f -print -quit)" ]; then
-            tar -czf artifact/immortalwrt-r3s-apk-packages-${BUILD_DATE}.tar.gz -C artifact/apps .
+            tar -czf "artifact/immortalwrt-${DEVICE_SLUG}-apk-packages-${BUILD_DATE}.tar.gz" -C artifact/apps .
           else
             echo 'No APK application packages were generated.'
           fi
           mkdir -p artifact/release
           cp -a artifact/firmware/. artifact/release/
-          if compgen -G 'artifact/immortalwrt-r3s-apk-packages-*.tar.gz' > /dev/null; then
-            cp artifact/immortalwrt-r3s-apk-packages-*.tar.gz artifact/release/
+          if compgen -G "artifact/immortalwrt-${DEVICE_SLUG}-apk-packages-*.tar.gz" > /dev/null; then
+            cp artifact/immortalwrt-${DEVICE_SLUG}-apk-packages-*.tar.gz artifact/release/
           fi
-          (cd artifact/release && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > artifact/release/SHA256SUMS
 
       - name: 上传固件
         if: success() && (github.event_name != 'workflow_dispatch' || inputs.UPLOAD_FIRMWARE == true)
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-r3s-firmware-${{ env.BUILD_DATE }}
+          name: immortalwrt-${{ matrix.slug }}-firmware-${{ env.BUILD_DATE }}
           path: openwrt/artifact/firmware/*
           if-no-files-found: warn
           retention-days: 30
@@ -296,8 +323,8 @@ jobs:
         if: success() && (github.event_name != 'workflow_dispatch' || inputs.UPLOAD_APP == true)
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-r3s-apk-packages-${{ env.BUILD_DATE }}
-          path: openwrt/artifact/immortalwrt-r3s-apk-packages-*.tar.gz
+          name: immortalwrt-${{ matrix.slug }}-apk-packages-${{ env.BUILD_DATE }}
+          path: openwrt/artifact/immortalwrt-${{ matrix.slug }}-apk-packages-*.tar.gz
           if-no-files-found: warn
           retention-days: 30
 
@@ -305,7 +332,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-r3s-buildinfo
+          name: immortalwrt-${{ matrix.slug }}-buildinfo
           path: openwrt/artifact/buildinfo/*
           if-no-files-found: warn
           retention-days: 90
@@ -314,7 +341,7 @@ jobs:
         if: success() && github.event_name == 'workflow_dispatch' && inputs.UPLOAD_RELEASE == true
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-r3s-release-${{ github.run_id }}
+          name: immortalwrt-${{ matrix.slug }}-release-${{ github.run_id }}
           path: openwrt/artifact/release/*
           if-no-files-found: error
           retention-days: 1
@@ -325,7 +352,7 @@ jobs:
     if: success()
     runs-on: ubuntu-22.04
     concurrency:
-      group: immortalwrt-r3s-config-${{ github.ref }}
+      group: immortalwrt-device-config-${{ github.ref }}
       cancel-in-progress: false
     permissions:
       contents: write
@@ -338,30 +365,40 @@ jobs:
       - name: 下载本次编译配置
         uses: actions/download-artifact@v4
         with:
-          name: immortalwrt-r3s-buildinfo
+          pattern: immortalwrt-*-buildinfo
           path: generated-buildinfo
 
       - name: 提交更新后的配置
         run: |
-          source_config="generated-buildinfo/immortalwrt-r3s.config"
-          target_config="$CONFIG_FILE"
-          test -s "$source_config" || { echo '编译配置文件为空或不存在'; exit 1; }
-          grep -qx 'CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y' "$source_config" || {
-            echo '配置文件未选择 NanoPi R3S，拒绝提交'
-            exit 1
-          }
-          mkdir -p "$(dirname "$target_config")"
-          install -m 0644 "$source_config" "$target_config"
+          mkdir -p config
+          for slug in r3s ax6000-stock; do
+            source_config="generated-buildinfo/immortalwrt-${slug}-buildinfo/immortalwrt-${slug}.config"
+            target_config="config/immortalwrt-${slug}.info"
+            test -s "$source_config" || { echo "编译配置文件为空或不存在：$source_config"; exit 1; }
+            case "$slug" in
+              r3s)
+                expected='CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y'
+                ;;
+              ax6000-stock)
+                expected='CONFIG_TARGET_DEVICE_mediatek_filogic_DEVICE_xiaomi_redmi-router-ax6000-stock=y'
+                ;;
+            esac
+            grep -Fqx "$expected" "$source_config" || {
+              echo "配置文件设备选择不匹配：$slug"
+              exit 1
+            }
+            install -m 0644 "$source_config" "$target_config"
+            git add -- "$target_config"
+          done
 
-          git add -- "$target_config"
-          if git diff --cached --quiet -- "$target_config"; then
+          if git diff --cached --quiet; then
             echo '配置没有变化，无需提交'
             exit 0
           fi
 
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git commit -m "ci: update ImmortalWrt R3S build config"
+          git commit -m "ci: update ImmortalWrt device build configs"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
   publish_release:
@@ -375,16 +412,20 @@ jobs:
       - name: 下载 Release 文件
         uses: actions/download-artifact@v4
         with:
-          name: immortalwrt-r3s-release-${{ github.run_id }}
+          pattern: immortalwrt-*-release-${{ github.run_id }}
           path: release-files
+          merge-multiple: true
+
+      - name: 生成校验和
+        run: (cd release-files && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > release-files/SHA256SUMS
 
       - name: 发布到 GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          name: ImmortalWrt R3S ${{ github.run_number }}-${{ github.run_attempt }}
-          tag_name: immortalwrt-r3s-${{ github.run_number }}-${{ github.run_attempt }}
+          name: ImmortalWrt 多设备固件 ${{ github.run_number }}-${{ github.run_attempt }}
+          tag_name: immortalwrt-multi-${{ github.run_number }}-${{ github.run_attempt }}
           body: |
-            ImmortalWrt 25.12 for FriendlyElec NanoPi R3S.
+            ImmortalWrt 25.12 for NanoPi R3S and Xiaomi Redmi Router AX6000 (stock layout).
 
             Build date: ${{ github.run_started_at }}
             Firmware and APK package archive are attached. SHA256SUMS contains checksums.

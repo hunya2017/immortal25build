@@ -95,10 +95,16 @@ set_package_enabled() {
     set_config_enabled "CONFIG_PACKAGE_$1" "$1"
 }
 
+# 从工作流矩阵读取设备选择，保留默认值以兼容单设备手动调用。
+TARGET_BOARD="${TARGET_BOARD:-rockchip}"
+TARGET_SUBTARGET="${TARGET_SUBTARGET:-armv8}"
+TARGET_DEVICE="${TARGET_DEVICE:-friendlyarm_nanopi-r3s}"
+DEVICE_NAME="${DEVICE_NAME:-FriendlyElec NanoPi R3S}"
+
 # 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
-set_config_enabled CONFIG_TARGET_rockchip "rockchip 目标"
-set_config_enabled CONFIG_TARGET_rockchip_armv8 "rockchip armv8 目标"
-set_config_enabled CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s "FriendlyElec NanoPi R3S 设备"
+set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}" "${TARGET_BOARD} 目标"
+set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}" "${TARGET_BOARD} ${TARGET_SUBTARGET} 目标"
+set_config_enabled "CONFIG_TARGET_DEVICE_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}" "${DEVICE_NAME} 设备"
 
 # LuCI、中文界面和主题
 set_package_enabled luci
