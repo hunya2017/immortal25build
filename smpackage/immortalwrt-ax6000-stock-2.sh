@@ -1,0 +1,288 @@
+#!/bin/bash
+
+# ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 2
+# 在配置加载后、编译前执行
+
+echo "=== ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 2 开始执行 ==="
+
+# 显示当前状态
+echo "当前目录：$(pwd)"
+echo "执行时间：$(date)"
+
+# ===== 验证配置文件 =====
+echo "验证配置文件..."
+
+if [ -f ".config" ]; then
+    echo "[✓] 配置文件存在"
+    echo "配置文件大小：$(wc -l < .config) 行"
+    
+    # 显示关键配置项
+    echo "关键配置项检查:"
+    echo "目标架构:"
+    grep "^CONFIG_TARGET_" .config | head -5
+    
+    echo "已启用的应用:"
+    echo "  LuCI 应用数量：$(grep -c '^CONFIG_PACKAGE_luci-app.*=y' .config)"
+    
+    echo "已启用的主题:"
+    echo "  LuCI 主题数量：$(grep -c '^CONFIG_PACKAGE_luci-theme.*=y' .config)"
+    
+else
+    echo "[✗] 警告：配置文件不存在"
+    echo "创建基础配置..."
+    : > .config
+fi
+
+# ===== 检查自定义设置应用状态（暂时注释） =====
+# echo "检查自定义设置应用状态..."
+# if [ -d "package/emortal/default-settings" ]; then
+#     cd package/emortal/default-settings || exit 1
+#     echo "检查 Makefile 修改:"
+#     if grep -q "my-default-settings" Makefile 2>/dev/null; then
+#         echo "[✓] Makefile 包含自定义设置包"
+#         grep -A3 -B1 "my-default-settings" Makefile
+#     else
+#         echo "[✗] Makefile 未包含自定义设置包"
+#     fi
+#     echo "检查自定义设置文件:"
+#     if [ -f "files/99-my-default-settings" ]; then
+#         echo "[✓] 自定义设置文件存在"
+#         echo "文件大小：$(wc -l < files/99-my-default-settings) 行"
+#         echo "文件权限：$(stat -c '%A' files/99-my-default-settings 2>/dev/null || stat -f '%Sp' files/99-my-default-settings 2>/dev/null)"
+#         echo "自定义设置内容预览:"
+#         echo "----------------------------------------"
+#         head -20 files/99-my-default-settings
+#         echo "----------------------------------------"
+#     else
+#         echo "[✗] 自定义设置文件不存在"
+#     fi
+#     echo "检查默认设置文件:"
+#     if [ -f "files/99-default-settings" ]; then
+#         echo "[✓] 默认设置文件存在"
+#         head -10 files/99-default-settings
+#     else
+#         echo "[✗] 默认设置文件不存在"
+#     fi
+#     cd - >/dev/null || exit 1
+# else
+#     echo "[✗] default-settings 目录不存在"
+# fi
+
+# ===== 最终配置调整 =====
+echo "最终配置调整..."
+
+# 确保关键配置启用
+echo "检查和调整关键配置..."
+
+set_config_enabled() {
+    local symbol="$1"
+    local label="${2:-$1}"
+
+    if grep -q "^${symbol}=y$" .config; then
+        return 0
+    elif grep -q "^${symbol}=" .config; then
+        sed -i "s|^${symbol}=.*$|${symbol}=y|" .config
+    elif grep -q "^# ${symbol} is not set$" .config; then
+        sed -i "s|^# ${symbol} is not set$|${symbol}=y|" .config
+    else
+        printf '%s=y\n' "$symbol" >> .config
+    fi
+
+    echo "[✓] 启用 $label"
+}
+
+set_package_enabled() {
+    set_config_enabled "CONFIG_PACKAGE_$1" "$1"
+}
+
+# 此文件专用于 Xiaomi AX6000 stock，固定目标，避免两个设备配置串用。
+TARGET_BOARD="mediatek"
+TARGET_SUBTARGET="filogic"
+TARGET_DEVICE="xiaomi_redmi-router-ax6000-stock"
+DEVICE_NAME="Xiaomi Redmi Router AX6000 stock layout"
+
+# 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
+set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}" "${TARGET_BOARD} 目标"
+set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}" "${TARGET_BOARD} ${TARGET_SUBTARGET} 目标"
+set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}" "${DEVICE_NAME} 设备"
+
+# LuCI、中文界面和主题
+set_package_enabled luci
+set_package_enabled luci-i18n-base-zh-cn
+
+if ! grep -Eq '^CONFIG_PACKAGE_luci-theme-[^=]+=y$' .config; then
+    set_package_enabled luci-theme-bootstrap
+fi
+
+# 自定义 feeds 中的应用及其兼容依赖
+set_package_enabled luci-compat
+set_package_enabled luci-app-store
+set_package_enabled luci-app-nikki
+set_package_enabled mihomo-meta
+set_package_enabled luci-app-momo
+set_package_enabled luci-app-adguardhome
+set_package_enabled luci-app-passwall2
+set_package_enabled luci-app-passwall2_Nftables_Transparent_Proxy
+
+# 暂时不查找或启用 my-default-settings 自定义包。
+# if [ -f "package/emortal/default-settings/Makefile" ] && grep -q "my-default-settings" package/emortal/default-settings/Makefile; then
+#     if ! grep -q "CONFIG_PACKAGE_my-default-settings=y" .config; then
+#         echo "CONFIG_PACKAGE_my-default-settings=y" >> .config
+#         echo "[✓] 启用自定义默认设置包"
+#     fi
+# fi
+
+# ===== 应用配置更改 =====
+echo "应用配置更改..."
+
+# Nikki feed 提供 mihomo-alpha 和 mihomo-meta 两个互斥变体；同时加入 Kconfig
+# 会形成循环依赖。保留 mihomo-meta，移除 alpha 变体的 package 链接/目录。
+MIHOMO_ALPHA_PATH="package/feeds/nikki/mihomo-alpha"
+if [ -e "$MIHOMO_ALPHA_PATH" ] || [ -L "$MIHOMO_ALPHA_PATH" ]; then
+    rm -rf "$MIHOMO_ALPHA_PATH"
+    echo "已移除互斥的 mihomo-alpha，使用 mihomo-meta"
+else
+    echo "mihomo-alpha feed 链接不存在，无需移除"
+fi
+
+# make defconfig 由工作流紧接着的配置步骤执行，避免在此处重复规范化配置。
+echo "应用包选项完成；目标配置将在工作流的 make defconfig 步骤中规范化。"
+
+# ===== 显示最终统计 =====
+echo "最终配置统计:"
+echo "总配置项：$(wc -l < .config)"
+echo "启用的包：$(grep -c "=y$" .config)"
+echo "禁用的包：$(grep -c "is not set$" .config)"
+
+echo "关键软件包状态:"
+echo "----------------------------------------"
+echo "LuCI 核心：$(grep 'CONFIG_PACKAGE_luci=' .config || echo '未配置')"
+echo "中文支持：$(grep -c 'CONFIG_PACKAGE_luci-i18n.*zh-cn=y' .config) 个语言包"
+echo "主题数量：$(grep -c 'CONFIG_PACKAGE_luci-theme.*=y' .config) 个主题"
+echo "应用数量：$(grep -c 'CONFIG_PACKAGE_luci-app.*=y' .config) 个应用"
+
+# 自定义设置状态检查暂时注释。
+# if grep -q "CONFIG_PACKAGE_my-default-settings=y" .config; then
+#     echo "自定义设置：[✓] 已启用"
+# elif grep -q "CONFIG_PACKAGE_default-settings=y" .config; then
+#     echo "自定义设置：[✓] 使用默认设置"
+# else
+#     echo "自定义设置：[✗] 未找到设置包"
+# fi
+echo "----------------------------------------"
+
+# ===== 预编译检查 =====
+echo "预编译环境检查..."
+
+echo "磁盘空间检查:"
+df -h . | tail -1
+
+echo "内存使用情况:"
+free -h
+
+echo "可用 CPU 核心：$(nproc)"
+
+# 检查必要的编译工具
+echo "编译工具检查:"
+TOOLS_CHECK=("make" "gcc" "g++" "git" "python3" "wget" "unzip")
+for tool in "${TOOLS_CHECK[@]}"; do
+    if command -v "$tool" >/dev/null 2>&1; then
+        echo "  [✓] $tool"
+    else
+        echo "  [✗] $tool (缺失)"
+    fi
+done
+
+# ===== 创建编译信息文件 =====
+echo "创建编译信息文件..."
+
+cat > build_info.txt << EOF
+ImmortalWrt 编译信息
+==================
+编译时间：$(date)
+编译主机：$(hostname)
+系统信息：$(uname -a)
+编译用户：$(whoami)
+工作目录：$(pwd)
+
+源码信息:
+分支：$REPO_BRANCH
+提交：$(git rev-parse HEAD 2>/dev/null || echo "未知")
+
+配置统计:
+总配置项：$(wc -l < .config)
+启用包数：$(grep -c "=y$" .config)
+禁用包数：$(grep -c "is not set$" .config)
+
+自定义功能:
+- 中文界面支持
+- 自定义 IP 地址：192.168.8.1
+- 自定义 WiFi 配置
+- 优化的时区设置
+- 预设管理密码
+
+系统资源:
+CPU 核心：$(nproc)
+内存：$(free -h | grep Mem | awk '{print $2}')
+磁盘：$(df -h . | tail -1 | awk '{print $4}') 可用
+
+编译环境：就绪
+==================
+EOF
+
+echo "编译信息已保存到：build_info.txt"
+
+# ===== 最终验证 =====
+echo "最终验证..."
+
+# 验证关键文件存在
+REQUIRED_FILES=("Makefile" ".config" "feeds.conf.default")
+for file in "${REQUIRED_FILES[@]}"; do
+    if [ -f "$file" ]; then
+        echo "[✓] $file 存在"
+    else
+        echo "[✗] $file 缺失"
+    fi
+done
+
+# 验证关键目录存在
+REQUIRED_DIRS=("package" "target" "toolchain" "tools")
+for dir in "${REQUIRED_DIRS[@]}"; do
+    if [ -d "$dir" ]; then
+        echo "[✓] $dir/ 目录存在"
+    else
+        echo "[✗] $dir/ 目录缺失"
+    fi
+done
+
+# ===== 记录脚本执行信息 =====
+SCRIPT2_LOG="build_script2.log"
+cat > "$SCRIPT2_LOG" << EOF
+ImmortalWrt 编译脚本 2 执行记录
+============================
+执行时间：$(date)
+工作目录：$(pwd)
+
+执行的操作:
+- 验证配置文件
+- 检查自定义设置
+- 调整最终配置
+- 环境预检查
+- 创建编译信息
+
+配置统计:
+- 总配置项：$(wc -l < .config)
+- 启用包数：$(grep -c "=y$" .config)
+# 自定义设置状态检查暂时关闭
+
+脚本状态：执行完成
+============================
+EOF
+
+echo "脚本 2 执行日志已保存到：$SCRIPT2_LOG"
+
+echo "=== ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 2 执行完成 ==="
+echo "系统准备就绪，可以开始编译！"
+echo ""
+
+exit 0

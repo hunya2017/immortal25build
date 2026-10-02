@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# ImmortalWrt 编译前自定义脚本 2
+# ImmortalWrt NanoPi R3S 编译前自定义脚本 2
 # 在配置加载后、编译前执行
 
-echo "=== ImmortalWrt 编译前自定义脚本 2 开始执行 ==="
+echo "=== ImmortalWrt NanoPi R3S 编译前自定义脚本 2 开始执行 ==="
 
 # 显示当前状态
 echo "当前目录：$(pwd)"
@@ -95,11 +95,11 @@ set_package_enabled() {
     set_config_enabled "CONFIG_PACKAGE_$1" "$1"
 }
 
-# 从工作流矩阵读取设备选择，保留默认值以兼容单设备手动调用。
-TARGET_BOARD="${TARGET_BOARD:-rockchip}"
-TARGET_SUBTARGET="${TARGET_SUBTARGET:-armv8}"
-TARGET_DEVICE="${TARGET_DEVICE:-friendlyarm_nanopi-r3s}"
-DEVICE_NAME="${DEVICE_NAME:-FriendlyElec NanoPi R3S}"
+# 此文件专用于 NanoPi R3S，固定目标，避免两个设备配置串用。
+TARGET_BOARD="rockchip"
+TARGET_SUBTARGET="armv8"
+TARGET_DEVICE="friendlyarm_nanopi-r3s"
+DEVICE_NAME="FriendlyElec NanoPi R3S"
 
 # 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
 set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}" "${TARGET_BOARD} 目标"
@@ -281,7 +281,7 @@ EOF
 
 echo "脚本 2 执行日志已保存到：$SCRIPT2_LOG"
 
-echo "=== ImmortalWrt 编译前自定义脚本 2 执行完成 ==="
+echo "=== ImmortalWrt NanoPi R3S 编译前自定义脚本 2 执行完成 ==="
 echo "系统准备就绪，可以开始编译！"
 echo ""
 

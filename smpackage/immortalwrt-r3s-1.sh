@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# ImmortalWrt 编译前自定义脚本 1
+# ImmortalWrt NanoPi R3S 编译前自定义脚本 1
 # 在更新 feeds 之前执行
 
-echo "=== ImmortalWrt 编译前自定义脚本 1 开始执行 ==="
+echo "=== ImmortalWrt NanoPi R3S 编译前自定义脚本 1 开始执行 ==="
 
 # 显示当前工作目录和基本信息
 echo "当前目录：$(pwd)"
@@ -211,7 +211,7 @@ EOF
 
 echo "脚本 1 执行日志已保存到：$SCRIPT1_LOG"
 
-echo "=== ImmortalWrt 编译前自定义脚本 1 执行完成 ==="
+echo "=== ImmortalWrt NanoPi R3S 编译前自定义脚本 1 执行完成 ==="
 echo ""
 
 exit 0
