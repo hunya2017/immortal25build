@@ -282,10 +282,36 @@ jobs:
 
       - name: 开启 SSH 调试会话
         if: (github.event_name == 'workflow_dispatch' && inputs.ssh == true) || (github.event_name == 'repository_dispatch' && github.event.action == 'ssh')
-        uses: owenthereal/action-upterm@v1
         timeout-minutes: 40
-        with:
-          limit-access-to-actor: true
+        run: |
+          set -euo pipefail
+          upterm_version="v0.33.0"
+          install_dir="$RUNNER_TEMP/upterm"
+          archive="$RUNNER_TEMP/upterm-linux-amd64.tar.gz"
+          mkdir -p "$install_dir"
+          curl --fail --location --retry 5 --retry-all-errors --retry-delay 2 \
+            "https://github.com/owenthereal/upterm/releases/download/${upterm_version}/upterm_linux_amd64.tar.gz" \
+            --output "$archive"
+          tar -xzf "$archive" -C "$install_dir" upterm
+          chmod +x "$install_dir/upterm"
+          session_json="$RUNNER_TEMP/upterm-session.json"
+          "$install_dir/upterm" host \
+            --detach \
+            --accept \
+            --output json \
+            --skip-host-key-check \
+            --authorized-keys "$GITHUB_WORKSPACE/.github/upterm-authorized-keys" \
+            --join-timeout 40m > "$session_json"
+          session_name="$(jq -er '.name' "$session_json")"
+          ssh_command="$(jq -er '.sshCommand' "$session_json")"
+          cleanup_upterm() {
+            "$install_dir/upterm" session stop "$session_name" >/dev/null 2>&1 || true
+          }
+          trap cleanup_upterm EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          echo "Upterm SSH command: $ssh_command"
+          "$install_dir/upterm" session wait "$session_name"
 
       - name: 编译固件和应用包
         working-directory: openwrt
