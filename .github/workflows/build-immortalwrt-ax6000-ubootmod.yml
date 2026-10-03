@@ -324,7 +324,7 @@ jobs:
         working-directory: openwrt
         run: |
           mkdir -p artifact/firmware artifact/buildinfo
-          find bin/targets -type f \( -name '*.bin' -o -name '*.img' -o -name '*.gz' -o -name '*.itb' -o -name '*.ubi' -o -name '*.fip' -o -name '*.zst' -o -name '*.info' -o -name '*.manifest' -o -name '*.buildinfo' \) -not -path '*/packages/*' -exec cp -t artifact/firmware {} +
+          find bin/targets -type f -not -path '*/packages/*' -exec cp -t artifact/firmware {} +
           cp .config "artifact/buildinfo/immortalwrt-${DEVICE_SLUG}.config"
           cp feeds.conf.default artifact/buildinfo/
           mkdir -p artifact/apps
