@@ -23,12 +23,12 @@ echo "开始应用自定义设置..."
 
 # 定义默认值
 # 不在固件中预置 root 密码；首次登录后请自行设置强密码。
-root_password=""
-lan_ip_address="192.168.8.1"
+# root_password=""
+# lan_ip_address="192.168.8.1"
 
 # PPPoE 手动配置账号密码（如需自动配置请使用环境变量）
-pppoe_manual_username=""
-pppoe_manual_password=""
+# pppoe_manual_username=""
+# pppoe_manual_password=""
 
 
 # # PPPoE 拨号设置（从环境变量读取，避免明文存储）
@@ -45,6 +45,65 @@ if [ -f "/etc/.force_reset" ]; then
   rm -f "$FIRST_BOOT_MARKER"
   rm -f "/etc/.force_reset"
 fi
+
+
+# Beware! This script will be in /rom/etc/uci-defaults/ as part of the image.
+# Uncomment lines to apply:
+#
+wlan_name="PDCN"
+wlan_password="1234567890"
+#
+# root_password=""
+#
+# For 24.10 and earlier, the 'netmask' will default to '255.255.255.0':
+# lan_ip_address="192.168.1.1"
+#
+# But, make sure to use CIDR notation for 25.12 and later:
+# lan_ip_address="192.168.1.1/24"
+#
+# pppoe_username=""
+# pppoe_password=""
+
+
+
+if [ -n "$root_password" ]; then
+  (echo "$root_password"; sleep 1; echo "$root_password") | passwd > /dev/null
+fi
+
+# Configure LAN
+# More options: https://openwrt.org/docs/guide-user/base-system/basic-networking
+if [ -n "$lan_ip_address" ]; then
+  uci set network.lan.ipaddr="$lan_ip_address"
+  uci commit network
+fi
+
+# Configure WLAN
+# More options: https://openwrt.org/docs/guide-user/network/wifi/basic#wi-fi_interfaces
+if [ ! -f "$FIRST_BOOT_MARKER" ] && [ -n "$wlan_name" -a -n "$wlan_password" -a ${#wlan_password} -ge 8 ]; then
+  uci set wireless.@wifi-device[0].disabled='0'
+  uci set wireless.@wifi-device[1].disabled='0'
+  uci set wireless.@wifi-iface[0].disabled='0'
+  uci set wireless.@wifi-iface[1].disabled='0'
+  uci set wireless.@wifi-iface[0].encryption='psk2'
+  uci set wireless.@wifi-iface[1].encryption='psk2'
+  uci set wireless.@wifi-iface[0].ssid="$wlan_name"
+  uci set wireless.@wifi-iface[1].ssid="$wlan_name"
+  uci set wireless.@wifi-iface[0].key="$wlan_password"
+  uci set wireless.@wifi-iface[1].key="$wlan_password"
+  uci commit wireless
+fi
+
+# Configure PPPoE
+# More options: https://openwrt.org/docs/guide-user/network/wan/wan_interface_protocols#protocol_pppoe_ppp_over_ethernet
+if [ -n "$pppoe_username" -a "$pppoe_password" ]; then
+  uci set network.wan.proto=pppoe
+  uci set network.wan.username="$pppoe_username"
+  uci set network.wan.password="$pppoe_password"
+  uci commit network
+fi
+
+echo "All done!"
+
 
 # # root 密码（仅在首次启动时强制设置）
 # if [ ! -f "$FIRST_BOOT_MARKER" ]; then
@@ -136,27 +195,27 @@ fi
 # fi
 
 # Host 绑定（先检查是否已存在该 MAC）
-add_static_host() {
-  local name="$1" ip="$2" mac="$3"
-  if ! uci show dhcp | grep -q "$mac"; then
-    echo "新增静态租约 $name $ip $mac"
-    uci add dhcp host
-    uci set dhcp.@host[-1].name="$name"
-    uci set dhcp.@host[-1].ip="$ip"
-    uci add_list dhcp.@host[-1].mac="$mac"
-  fi
-}
+# add_static_host() {
+#   local name="$1" ip="$2" mac="$3"
+#   if ! uci show dhcp | grep -q "$mac"; then
+#     echo "新增静态租约 $name $ip $mac"
+#     uci add dhcp host
+#     uci set dhcp.@host[-1].name="$name"
+#     uci set dhcp.@host[-1].ip="$ip"
+#     uci add_list dhcp.@host[-1].mac="$mac"
+#   fi
+# }
 
 # 添加静态地址绑定（仅在首次启动时添加）
-if [ ! -f "$FIRST_BOOT_MARKER" ]; then
-  log "[静态 DHCP] 开始添加静态地址绑定"
-  add_static_host "DESKTOP-DR6M5VG" "192.168.10.107" "A4:0C:66:2A:A2:00"
-  add_static_host "armbian" "192.168.10.158" "6A:CE:3B:D4:CB:8B"
-  add_static_host "WIN-LMSJ088AVIQ" "192.168.10.180" "7C:2B:E1:13:6E:83"
-  log "[静态 DHCP] 配置完成"
-else
-  log "[静态 DHCP] 跳过 - 已存在首次启动标记"
-fi
+# if [ ! -f "$FIRST_BOOT_MARKER" ]; then
+#   log "[静态 DHCP] 开始添加静态地址绑定"
+#   add_static_host "DESKTOP-DR6M5VG" "192.168.10.107" "A4:0C:66:2A:A2:00"
+#   add_static_host "armbian" "192.168.10.158" "6A:CE:3B:D4:CB:8B"
+#   add_static_host "WIN-LMSJ088AVIQ" "192.168.10.180" "7C:2B:E1:13:6E:83"
+#   log "[静态 DHCP] 配置完成"
+# else
+#   log "[静态 DHCP] 跳过 - 已存在首次启动标记"
+# fi
 
 # # zerotier 设置（仅在首次启动且安装了才配置）
 # if [ ! -f "$FIRST_BOOT_MARKER" ] && opkg list-installed | grep -q "^zerotier"; then
