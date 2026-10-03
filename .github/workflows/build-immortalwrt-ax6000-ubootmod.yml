@@ -1,4 +1,4 @@
-name: ImmortalWrt Xiaomi AX6000 编译
+name: ImmortalWrt Xiaomi AX6000 U-Boot 编译
 
 on:
   schedule:
@@ -46,9 +46,9 @@ permissions:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-25.12
-  DIY_P1_SH: smpackage/immortalwrt-ax6000-stock-1.sh
-  DIY_P2_SH: smpackage/immortalwrt-ax6000-stock-2.sh
-  SETTINGS_PATCH: smpackage/settings.patch
+  DIY_P1_SH: smpackage/immortalwrt-ax6000-ubootmod-1.sh
+  DIY_P2_SH: smpackage/immortalwrt-ax6000-ubootmod-2.sh
+  SETTINGS_PATCH: smpackage/settings-ax6000-ubootmod.patch
 
 jobs:
   build:
@@ -60,13 +60,13 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - slug: ax6000-stock
-            name: Xiaomi Redmi Router AX6000 stock layout
-            config_file: config/immortalwrt-ax6000-stock.info
+          - slug: ax6000-ubootmod
+            name: Xiaomi Redmi Router AX6000 OpenWrt U-Boot layout
+            config_file: config/immortalwrt-ax6000-ubootmod.info
             target_board: mediatek
             target_subtarget: filogic
-            target_device: xiaomi_redmi-router-ax6000-stock
-            target_profile: DEVICE_xiaomi_redmi-router-ax6000-stock
+            target_device: xiaomi_redmi-router-ax6000-ubootmod
+            target_profile: DEVICE_xiaomi_redmi-router-ax6000-ubootmod
     env:
       DEVICE_SLUG: ${{ matrix.slug }}
       DEVICE_NAME: ${{ matrix.name }}
@@ -85,7 +85,7 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const workflowId = 'build-immortalwrt-ax6000.yml';
+            const workflowId = 'build-immortalwrt-ax6000-ubootmod.yml';
             const { data: runs } = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -151,7 +151,7 @@ jobs:
           ./scripts/feeds update -a
           ./scripts/feeds install -a
 
-      - name: 从 APK 软件源列表排除不可用源
+      - name: 从 APK 在线源列表排除 iStore 源
         working-directory: openwrt
         run: |
           python3 - <<'PY'
@@ -163,12 +163,12 @@ jobs:
           end = source.index("\nendef", start)
           block = source[start:end]
           old = "$(foreach feed,$(FEEDS_AVAILABLE),"
-          new = "$(foreach feed,$(filter-out istore nikki momo passwall2 passwall_packages,$(FEEDS_AVAILABLE)),"
+          new = "$(foreach feed,$(filter-out istore,$(FEEDS_AVAILABLE)),"
           if block.count(old) != 1:
               raise SystemExit("无法唯一定位 APK feed 列表生成逻辑，停止修改")
           source = source[:start] + block.replace(old, new, 1) + source[end:]
           path.write_text(source, encoding="utf-8")
-          print("已从固件 APK 在线源列表排除 5 个自定义源，编译 feed 保持不变")
+          print("保留 iStore 编译 feed；从固件在线 APK 源列表中排除 istore")
           PY
 
       - name: 应用 ImmortalWrt 默认设置
@@ -217,9 +217,9 @@ jobs:
           path: |
             openwrt/dl
             openwrt/.ccache
-          key: immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-ax6000-stock-1.sh', 'smpackage/immortalwrt-ax6000-stock-2.sh', matrix.config_file) }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-ax6000-ubootmod-1.sh', 'smpackage/immortalwrt-ax6000-ubootmod-2.sh', matrix.config_file) }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-ax6000-stock-1.sh', 'smpackage/immortalwrt-ax6000-stock-2.sh', matrix.config_file) }}-
+            immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-ax6000-ubootmod-1.sh', 'smpackage/immortalwrt-ax6000-ubootmod-2.sh', matrix.config_file) }}-
             immortalwrt-25.12-${{ matrix.slug }}-
 
       - name: 清理 Go 模块缓存
@@ -324,7 +324,7 @@ jobs:
         working-directory: openwrt
         run: |
           mkdir -p artifact/firmware artifact/buildinfo
-          find bin/targets -type f \( -name '*.bin' -o -name '*.img' -o -name '*.gz' -o -name '*.itb' -o -name '*.manifest' -o -name '*.buildinfo' \) -not -path '*/packages/*' -exec cp -t artifact/firmware {} +
+          find bin/targets -type f \( -name '*.bin' -o -name '*.img' -o -name '*.gz' -o -name '*.itb' -o -name '*.ubi' -o -name '*.fip' -o -name '*.zst' -o -name '*.info' -o -name '*.manifest' -o -name '*.buildinfo' \) -not -path '*/packages/*' -exec cp -t artifact/firmware {} +
           cp .config "artifact/buildinfo/immortalwrt-${DEVICE_SLUG}.config"
           cp feeds.conf.default artifact/buildinfo/
           mkdir -p artifact/apps
@@ -401,18 +401,11 @@ jobs:
       - name: 提交更新后的配置
         run: |
           mkdir -p config
-          for slug in ax6000-stock; do
+          for slug in ax6000-ubootmod; do
             source_config="generated-buildinfo/immortalwrt-${slug}-buildinfo/immortalwrt-${slug}.config"
             target_config="config/immortalwrt-${slug}.info"
             test -s "$source_config" || { echo "编译配置文件为空或不存在：$source_config"; exit 1; }
-            case "$slug" in
-              r3s)
-                expected='CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y'
-                ;;
-              ax6000-stock)
-                expected='CONFIG_TARGET_mediatek_filogic_DEVICE_xiaomi_redmi-router-ax6000-stock=y'
-                ;;
-            esac
+            expected='CONFIG_TARGET_mediatek_filogic_DEVICE_xiaomi_redmi-router-ax6000-ubootmod=y'
             grep -Fqx "$expected" "$source_config" || {
               echo "配置文件设备选择不匹配：$slug"
               exit 1
@@ -453,7 +446,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: ImmortalWrt Xiaomi AX6000 ${{ github.run_number }}-${{ github.run_attempt }}
-          tag_name: immortalwrt-ax6000-stock-${{ github.run_number }}-${{ github.run_attempt }}
+          tag_name: immortalwrt-ax6000-ubootmod-${{ github.run_number }}-${{ github.run_attempt }}
           body: |
             ImmortalWrt 25.12 device firmware build.
 

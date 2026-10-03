@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 1
+# ImmortalWrt Xiaomi AX6000 U-Boot 编译前自定义脚本 1
 # 在更新 feeds 之前执行
 
-echo "=== ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 1 开始执行 ==="
+echo "=== ImmortalWrt Xiaomi AX6000 U-Boot 编译前自定义脚本 1 开始执行 ==="
 
 # 显示当前工作目录和基本信息
 echo "当前目录：$(pwd)"
@@ -50,30 +50,17 @@ else
     echo "未找到版本文件"
 fi
 
-# ===== 注册自定义软件源 =====
-echo "注册自定义软件源..."
-
-add_feed() {
-    local feed_name="$1"
-    local feed_url="$2"
-
-    if ! grep -Eq "^src-git[[:space:]]+${feed_name}[[:space:]]" feeds.conf.default; then
-        printf 'src-git %s %s\n' "$feed_name" "$feed_url" >> feeds.conf.default
-        echo "已添加 feed：$feed_name"
-    else
-        echo "feed 已存在：$feed_name"
-    fi
-}
-
-if [ -f "feeds.conf.default" ]; then
-    add_feed istore "https://github.com/linkease/istore.git;main"
-    add_feed nikki "https://github.com/nikkinikki-org/OpenWrt-nikki.git;main"
-    add_feed momo "https://github.com/nikkinikki-org/OpenWrt-momo.git;main"
-    add_feed passwall2 "https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main"
-    add_feed passwall_packages "https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main"
-else
-    echo "错误：feeds.conf.default 不存在，无法添加自定义软件源"
+# ===== 保留 ImmortalWrt 官方软件源 =====
+echo "保留 ImmortalWrt 官方软件源；AdGuardHome 作为单独软件包加入源码树..."
+if [ ! -f "feeds.conf.default" ]; then
+    echo "错误：feeds.conf.default 不存在"
     exit 1
+fi
+if ! grep -Eq '^src-git[[:space:]]+istore[[:space:]]' feeds.conf.default; then
+    printf '%s\n' 'src-git istore https://github.com/linkease/istore.git;main' >> feeds.conf.default
+    echo "已添加 iStore 编译源"
+else
+    echo "iStore 编译源已存在"
 fi
 
 # 该仓库本身就是单个 OpenWrt 包，按其说明直接放入 package 目录；当前维护分支为 dev。
@@ -211,7 +198,7 @@ EOF
 
 echo "脚本 1 执行日志已保存到：$SCRIPT1_LOG"
 
-echo "=== ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 1 执行完成 ==="
+echo "=== ImmortalWrt Xiaomi AX6000 U-Boot 编译前自定义脚本 1 执行完成 ==="
 echo ""
 
 exit 0

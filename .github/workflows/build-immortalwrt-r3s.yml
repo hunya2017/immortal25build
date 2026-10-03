@@ -48,7 +48,7 @@ env:
   REPO_BRANCH: openwrt-25.12
   DIY_P1_SH: smpackage/immortalwrt-r3s-1.sh
   DIY_P2_SH: smpackage/immortalwrt-r3s-2.sh
-  SETTINGS_PATCH: smpackage/settings.patch
+  SETTINGS_PATCH: smpackage/settings-r3s.patch
 
 jobs:
   build:
@@ -405,14 +405,7 @@ jobs:
             source_config="generated-buildinfo/immortalwrt-${slug}-buildinfo/immortalwrt-${slug}.config"
             target_config="config/immortalwrt-${slug}.info"
             test -s "$source_config" || { echo "编译配置文件为空或不存在：$source_config"; exit 1; }
-            case "$slug" in
-              r3s)
-                expected='CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y'
-                ;;
-              ax6000-stock)
-                expected='CONFIG_TARGET_mediatek_filogic_DEVICE_xiaomi_redmi-router-ax6000-stock=y'
-                ;;
-            esac
+            expected='CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r3s=y'
             grep -Fqx "$expected" "$source_config" || {
               echo "配置文件设备选择不匹配：$slug"
               exit 1

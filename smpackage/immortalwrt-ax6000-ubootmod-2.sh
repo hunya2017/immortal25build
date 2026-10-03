@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 2
+# ImmortalWrt Xiaomi AX6000 U-Boot 编译前自定义脚本 2
 # 在配置加载后、编译前执行
 
-echo "=== ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 2 开始执行 ==="
+echo "=== ImmortalWrt Xiaomi AX6000 U-Boot 编译前自定义脚本 2 开始执行 ==="
 
 # 显示当前状态
 echo "当前目录：$(pwd)"
@@ -95,11 +95,11 @@ set_package_enabled() {
     set_config_enabled "CONFIG_PACKAGE_$1" "$1"
 }
 
-# 此文件专用于 Xiaomi AX6000 stock，固定目标，避免两个设备配置串用。
+# 此文件专用于 Xiaomi AX6000 U-Boot，固定目标，避免两个设备配置串用。
 TARGET_BOARD="mediatek"
 TARGET_SUBTARGET="filogic"
-TARGET_DEVICE="xiaomi_redmi-router-ax6000-stock"
-DEVICE_NAME="Xiaomi Redmi Router AX6000 stock layout"
+TARGET_DEVICE="xiaomi_redmi-router-ax6000-ubootmod"
+DEVICE_NAME="Xiaomi Redmi Router AX6000 OpenWrt U-Boot layout"
 
 # 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
 set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}" "${TARGET_BOARD} 目标"
@@ -114,15 +114,21 @@ if ! grep -Eq '^CONFIG_PACKAGE_luci-theme-[^=]+=y$' .config; then
     set_package_enabled luci-theme-bootstrap
 fi
 
-# 自定义 feeds 中的应用及其兼容依赖
+# AdGuardHome 单包及其兼容依赖
 set_package_enabled luci-compat
 set_package_enabled luci-app-store
-set_package_enabled luci-app-nikki
-set_package_enabled mihomo-meta
-set_package_enabled luci-app-momo
 set_package_enabled luci-app-adguardhome
-set_package_enabled luci-app-passwall2
-set_package_enabled luci-app-passwall2_Nftables_Transparent_Proxy
+
+# 清除上一次配置中来自已移除自定义 feeds 的插件选择，防止旧 .config 将其带回。
+for package in \
+    luci-app-nikki \
+    mihomo-meta \
+    mihomo-alpha \
+    luci-app-momo \
+    luci-app-passwall2 \
+    luci-app-passwall2_Nftables_Transparent_Proxy; do
+    sed -i "/^CONFIG_PACKAGE_${package}=/d; /^# CONFIG_PACKAGE_${package} is not set$/d" .config
+done
 
 # 暂时不查找或启用 my-default-settings 自定义包。
 # if [ -f "package/emortal/default-settings/Makefile" ] && grep -q "my-default-settings" package/emortal/default-settings/Makefile; then
@@ -134,16 +140,6 @@ set_package_enabled luci-app-passwall2_Nftables_Transparent_Proxy
 
 # ===== 应用配置更改 =====
 echo "应用配置更改..."
-
-# Nikki feed 提供 mihomo-alpha 和 mihomo-meta 两个互斥变体；同时加入 Kconfig
-# 会形成循环依赖。保留 mihomo-meta，移除 alpha 变体的 package 链接/目录。
-MIHOMO_ALPHA_PATH="package/feeds/nikki/mihomo-alpha"
-if [ -e "$MIHOMO_ALPHA_PATH" ] || [ -L "$MIHOMO_ALPHA_PATH" ]; then
-    rm -rf "$MIHOMO_ALPHA_PATH"
-    echo "已移除互斥的 mihomo-alpha，使用 mihomo-meta"
-else
-    echo "mihomo-alpha feed 链接不存在，无需移除"
-fi
 
 # make defconfig 由工作流紧接着的配置步骤执行，避免在此处重复规范化配置。
 echo "应用包选项完成；目标配置将在工作流的 make defconfig 步骤中规范化。"
@@ -281,7 +277,7 @@ EOF
 
 echo "脚本 2 执行日志已保存到：$SCRIPT2_LOG"
 
-echo "=== ImmortalWrt Xiaomi AX6000 stock 编译前自定义脚本 2 执行完成 ==="
+echo "=== ImmortalWrt Xiaomi AX6000 U-Boot 编译前自定义脚本 2 执行完成 ==="
 echo "系统准备就绪，可以开始编译！"
 echo ""
 
