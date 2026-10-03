@@ -76,19 +76,8 @@ else
     exit 1
 fi
 
-# 该仓库本身就是单个 OpenWrt 包，按其说明直接放入 package 目录；当前维护分支为 dev。
-if [ ! -d "package/luci-app-adguardhome" ]; then
-    git clone --depth 1 --branch dev \
-        https://github.com/stevenjoezhang/luci-app-adguardhome.git \
-        package/luci-app-adguardhome || {
-        echo "错误：AdGuardHome 插件仓库克隆失败"
-        exit 1
-    }
-fi
-
-
-
-
+# AdGuardHome 使用 ImmortalWrt 自带的 LuCI/feed 软件包，不额外克隆第三方源。
+echo "AdGuardHome 将使用 ImmortalWrt 官方源码中的软件包"
 # ===== 修改目标架构配置 =====
 echo "检查目标架构配置..."
 
