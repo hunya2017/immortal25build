@@ -95,17 +95,6 @@ set_package_enabled() {
     set_config_enabled "CONFIG_PACKAGE_$1" "$1"
 }
 
-# 此文件专用于 Xiaomi AX6000 U-Boot，固定目标，避免两个设备配置串用。
-TARGET_BOARD="mediatek"
-TARGET_SUBTARGET="filogic"
-TARGET_DEVICE="xiaomi_redmi-router-ax6000-ubootmod"
-DEVICE_NAME="Xiaomi Redmi Router AX6000 OpenWrt U-Boot layout"
-
-# 空 .config 也必须先选定目标，否则后续检查与编译无法确定设备。
-set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}" "${TARGET_BOARD} 目标"
-set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}" "${TARGET_BOARD} ${TARGET_SUBTARGET} 目标"
-set_config_enabled "CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}" "${DEVICE_NAME} 设备"
-
 # LuCI、中文界面和主题
 set_package_enabled luci
 set_package_enabled luci-i18n-base-zh-cn

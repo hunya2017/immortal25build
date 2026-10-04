@@ -1,4 +1,4 @@
-name: ImmortalWrt Xiaomi AX6000 U-Boot 编译
+name: ImmortalWrt 25.12 SSH 自定义设备编译
 
 on:
   schedule:
@@ -53,6 +53,9 @@ env:
 jobs:
   build:
     name: Build ImmortalWrt for ${{ matrix.name }}
+    outputs:
+      device_name: ${{ steps.select-device.outputs.device_name }}
+      device_slug: ${{ steps.select-device.outputs.device_slug }}
     if: (github.event_name != 'watch' && github.event_name != 'repository_dispatch') || github.actor == github.repository_owner
     runs-on: ubuntu-22.04
     timeout-minutes: 360
@@ -61,7 +64,7 @@ jobs:
       matrix:
         include:
           - slug: ax6000-ubootmod
-            name: Xiaomi Redmi Router AX6000 OpenWrt U-Boot layout
+            name: SSH 自定义设备（默认 AX6000 U-Bootmod）
             config_file: config/immortalwrt-ax6000-ubootmod.info
             target_board: mediatek
             target_subtarget: filogic
@@ -69,6 +72,7 @@ jobs:
             target_profile: DEVICE_xiaomi_redmi-router-ax6000-ubootmod
     env:
       DEVICE_SLUG: ${{ matrix.slug }}
+      CONFIG_ARTIFACT_SLUG: ${{ matrix.slug }}
       DEVICE_NAME: ${{ matrix.name }}
       CONFIG_FILE: ${{ matrix.config_file }}
       TARGET_BOARD: ${{ matrix.target_board }}
@@ -103,7 +107,7 @@ jobs:
                 run_id: run.id,
                 per_page: 100
               });
-              const wantedName = `immortalwrt-${{ matrix.slug }}-buildinfo`;
+              const wantedName = 'immortalwrt-custom-device-buildinfo';
               const configArtifact = data.artifacts.find(artifact =>
                 artifact.name === wantedName && !artifact.expired
               );
@@ -171,42 +175,6 @@ jobs:
           print("保留 iStore 编译 feed；从固件在线 APK 源列表中排除 istore")
           PY
 
-      - name: 应用 ImmortalWrt 默认设置
-        env:
-          SETTINGS_PATCH: ${{ github.workspace }}/${{ env.SETTINGS_PATCH }}
-        working-directory: openwrt
-        run: |
-          target="package/emortal/default-settings/files/99-default-settings"
-          if [ ! -f "$SETTINGS_PATCH" ]; then
-            echo "未找到自定义设置脚本，跳过：$SETTINGS_PATCH"
-            exit 0
-          fi
-          if [ ! -f "$target" ]; then
-            echo "错误：ImmortalWrt 默认设置脚本不存在：$target"
-            exit 1
-          fi
-          python3 - "$target" "$SETTINGS_PATCH" <<'PY'
-          import pathlib
-          import sys
-
-          target = pathlib.Path(sys.argv[1])
-          custom = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
-          source = target.read_text(encoding="utf-8")
-          marker = "# === 自定义设置开始 ==="
-          if marker in source:
-              print("默认设置中已存在自定义设置，跳过重复注入")
-              raise SystemExit(0)
-          if "exit 0" not in source:
-              raise SystemExit("默认设置脚本中未找到 exit 0，无法安全注入")
-          source = source.replace(
-              "exit 0",
-              f"\n{custom.rstrip()}\n\nexit 0",
-              1,
-          )
-          target.write_text(source, encoding="utf-8")
-          print(f"已将自定义设置注入 {target}")
-          PY
-
       - name: 准备编译缓存目录
         run: mkdir -p openwrt/dl openwrt/.ccache
 
@@ -250,35 +218,25 @@ jobs:
             chmod +x "$DIY_P2_SH"
             (cd openwrt && "$GITHUB_WORKSPACE/$DIY_P2_SH")
           fi
-          device_config="CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
-          grep -Fqx "$device_config" openwrt/.config || {
-            echo "The configuration must select ${DEVICE_NAME}."
-            exit 1
-          }
 
-      - name: 更新配置并下载源码包
+      - name: 设置默认设备并初始化配置
         working-directory: openwrt
         run: |
-          # make defconfig 需要 profile 字符串与设备选择符一致，避免只写入
-          # CONFIG_TARGET_* 布尔值时将设备配置归一化掉。
-          cat >> .config <<EOF
+          if ! grep -Eq '^CONFIG_TARGET_[^=]+_DEVICE_[^=]+=y$' .config; then
+            cat >> .config <<EOF
           CONFIG_TARGET_${TARGET_BOARD}=y
           CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}=y
           CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y
           CONFIG_TARGET_BOARD="${TARGET_BOARD}"
           CONFIG_TARGET_SUBTARGET="${TARGET_SUBTARGET}"
           CONFIG_TARGET_PROFILE="${TARGET_PROFILE}"
-          CONFIG_CCACHE=y
           EOF
+            echo '配置未指定设备，使用 AX6000 U-Bootmod 作为默认目标；可在 SSH 会话中更改。'
+          else
+            echo '沿用配置文件中的设备选择；可在 SSH 会话中更改。'
+          fi
+          echo 'CONFIG_CCACHE=y' >> .config
           make defconfig
-          device_config="CONFIG_TARGET_${TARGET_BOARD}_${TARGET_SUBTARGET}_DEVICE_${TARGET_DEVICE}=y"
-          grep -Fqx "$device_config" .config || {
-            echo "make defconfig removed the ${DEVICE_NAME} profile; target configuration is invalid."
-            grep '^CONFIG_TARGET_' .config | head -30
-            exit 1
-          }
-          make download -j"$(nproc)"
-          find dl -size -1024c -print -delete
 
       - name: 开启 SSH 调试会话
         if: (github.event_name == 'workflow_dispatch' && inputs.ssh == true) || (github.event_name == 'repository_dispatch' && github.event.action == 'ssh')
@@ -294,6 +252,7 @@ jobs:
             --output "$archive"
           tar -xzf "$archive" -C "$install_dir" upterm
           chmod +x "$install_dir/upterm"
+          echo 'SSH 会话连接后执行：cd openwrt && make menuconfig；选择 Target System、Subtarget 和 Target Profile，保存 .config 后退出 menuconfig，再退出 SSH 会话即可继续编译。'
           session_json="$RUNNER_TEMP/upterm-session.json"
           "$install_dir/upterm" host \
             --detach \
@@ -313,6 +272,67 @@ jobs:
           echo "Upterm SSH command: $ssh_command"
           "$install_dir/upterm" session wait "$session_name"
 
+      - name: 规范化 SSH 设备选择并下载源码包
+        id: select-device
+        working-directory: openwrt
+        run: |
+          make defconfig
+          mapfile -t selected_devices < <(grep -E '^CONFIG_TARGET_[^=]+_DEVICE_[^=]+=y$' .config || true)
+          if [ "${#selected_devices[@]}" -ne 1 ]; then
+            echo "设备选择无效：期望且仅期望一个 CONFIG_TARGET_*_DEVICE_*，实际找到 ${#selected_devices[@]} 个。"
+            printf '%s\n' "${selected_devices[@]}"
+            grep -E '^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)=' .config || true
+            exit 1
+          fi
+          selected_symbol="${selected_devices[0]%%=y}"
+          selected_device="${selected_symbol##*_DEVICE_}"
+          selected_slug="$(printf '%s' "$selected_device" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
+          selected_name="$(printf '%s' "$selected_device" | tr '_-' '  ' | awk '{ for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2); print }')"
+          echo "所选设备：$selected_symbol"
+          echo "DEVICE_SLUG=$selected_slug" >> "$GITHUB_ENV"
+          echo "DEVICE_NAME=$selected_name" >> "$GITHUB_ENV"
+          echo "TARGET_DEVICE=$selected_device" >> "$GITHUB_ENV"
+          echo "device_slug=$selected_slug" >> "$GITHUB_OUTPUT"
+          echo "device_name=$selected_name" >> "$GITHUB_OUTPUT"
+          make download -j"$(nproc)"
+          find dl -size -1024c -print -delete
+
+      - name: 应用 AX6000 U-Bootmod 默认设置
+        env:
+          SETTINGS_PATCH: ${{ github.workspace }}/${{ env.SETTINGS_PATCH }}
+        working-directory: openwrt
+        run: |
+          if [ "$TARGET_DEVICE" != 'xiaomi_redmi-router-ax6000-ubootmod' ]; then
+            echo "所选设备为 $TARGET_DEVICE，跳过 AX6000 专用默认设置补丁"
+            exit 0
+          fi
+          target="package/emortal/default-settings/files/99-default-settings"
+          if [ ! -f "$SETTINGS_PATCH" ]; then
+            echo "未找到 AX6000 自定义设置脚本，跳过：$SETTINGS_PATCH"
+            exit 0
+          fi
+          if [ ! -f "$target" ]; then
+            echo "错误：ImmortalWrt 默认设置脚本不存在：$target"
+            exit 1
+          fi
+          python3 - "$target" "$SETTINGS_PATCH" <<'PY'
+          import pathlib
+          import sys
+
+          target = pathlib.Path(sys.argv[1])
+          custom = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8")
+          source = target.read_text(encoding="utf-8")
+          marker = "# === 自定义设置开始 ==="
+          if marker in source:
+              print("默认设置中已存在自定义设置，跳过重复注入")
+              raise SystemExit(0)
+          if "exit 0" not in source:
+              raise SystemExit("默认设置脚本中未找到 exit 0，无法安全注入")
+          source = source.replace("exit 0", f"\n{marker}\n{custom.rstrip()}\n\nexit 0", 1)
+          target.write_text(source, encoding="utf-8")
+          print(f"已将 AX6000 自定义设置注入 {target}")
+          PY
+
       - name: 编译固件和应用包
         working-directory: openwrt
         run: |
@@ -325,7 +345,7 @@ jobs:
         run: |
           mkdir -p artifact/firmware artifact/buildinfo
           find bin/targets -type f -not -path '*/packages/*' -exec cp -t artifact/firmware {} +
-          cp .config "artifact/buildinfo/immortalwrt-${DEVICE_SLUG}.config"
+          cp .config "artifact/buildinfo/immortalwrt-${CONFIG_ARTIFACT_SLUG}.config"
           cp feeds.conf.default artifact/buildinfo/
           mkdir -p artifact/apps
           find bin/packages bin/targets -type f -name '*.apk' -exec cp -t artifact/apps {} + 2>/dev/null || true
@@ -344,7 +364,7 @@ jobs:
         if: success() && (github.event_name != 'workflow_dispatch' || inputs.UPLOAD_FIRMWARE == true)
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-${{ matrix.slug }}-firmware-${{ env.BUILD_DATE }}
+          name: immortalwrt-${{ steps.select-device.outputs.device_slug }}-firmware-${{ env.BUILD_DATE }}
           path: openwrt/artifact/firmware/*
           if-no-files-found: warn
           retention-days: 30
@@ -353,8 +373,8 @@ jobs:
         if: success() && (github.event_name != 'workflow_dispatch' || inputs.UPLOAD_APP == true)
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-${{ matrix.slug }}-apk-packages-${{ env.BUILD_DATE }}
-          path: openwrt/artifact/immortalwrt-${{ matrix.slug }}-apk-packages-*.tar.gz
+          name: immortalwrt-${{ steps.select-device.outputs.device_slug }}-apk-packages-${{ env.BUILD_DATE }}
+          path: openwrt/artifact/immortalwrt-*-apk-packages-*.tar.gz
           if-no-files-found: warn
           retention-days: 30
 
@@ -362,7 +382,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-${{ matrix.slug }}-buildinfo
+          name: immortalwrt-custom-device-buildinfo
           path: openwrt/artifact/buildinfo/*
           if-no-files-found: warn
           retention-days: 90
@@ -371,7 +391,7 @@ jobs:
         if: success() && github.event_name == 'workflow_dispatch' && inputs.UPLOAD_RELEASE == true
         uses: actions/upload-artifact@v4
         with:
-          name: immortalwrt-${{ matrix.slug }}-release-${{ github.run_id }}
+          name: immortalwrt-${{ steps.select-device.outputs.device_slug }}-release-${{ github.run_id }}
           path: openwrt/artifact/release/*
           if-no-files-found: error
           retention-days: 1
@@ -402,16 +422,22 @@ jobs:
         run: |
           mkdir -p config
           for slug in ax6000-ubootmod; do
-            source_config="generated-buildinfo/immortalwrt-${slug}-buildinfo/immortalwrt-${slug}.config"
+            source_config="generated-buildinfo/immortalwrt-custom-device-buildinfo/immortalwrt-${slug}.config"
             target_config="config/immortalwrt-${slug}.info"
             test -s "$source_config" || { echo "编译配置文件为空或不存在：$source_config"; exit 1; }
             # 设备目标由编译脚本和 workflow 在构建时设置，不写回可复用的 .info 配置。
+            target_board="$(sed -n 's/^CONFIG_TARGET_BOARD="\([^"]*\)"$/\1/p' "$source_config" | head -1)"
+            target_subtarget="$(sed -n 's/^CONFIG_TARGET_SUBTARGET="\([^"]*\)"$/\1/p' "$source_config" | head -1)"
             sed -i -E \
-              -e '/^CONFIG_TARGET_mediatek=y$/d' \
-              -e '/^CONFIG_TARGET_mediatek_filogic=y$/d' \
-              -e '/^CONFIG_TARGET_mediatek_filogic_DEVICE_[^=]+=y$/d' \
+              -e '/^CONFIG_TARGET_[^=]+_DEVICE_[^=]+=y$/d' \
               -e '/^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE|ARCH_PACKAGES)=/d' \
               "$source_config"
+            if [ -n "$target_board" ]; then
+              sed -i "/^CONFIG_TARGET_${target_board}=y$/d" "$source_config"
+            fi
+            if [ -n "$target_board" ] && [ -n "$target_subtarget" ]; then
+              sed -i "/^CONFIG_TARGET_${target_board}_${target_subtarget}=y$/d" "$source_config"
+            fi
             install -m 0644 "$source_config" "$target_config"
             git add -- "$target_config"
           done
@@ -437,7 +463,7 @@ jobs:
       - name: 下载 Release 文件
         uses: actions/download-artifact@v4
         with:
-          pattern: immortalwrt-*-release-${{ github.run_id }}
+          pattern: immortalwrt-${{ needs.build.outputs.device_slug }}-release-${{ github.run_id }}
           path: release-files
           merge-multiple: true
 
@@ -447,8 +473,8 @@ jobs:
       - name: 发布到 GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          name: ImmortalWrt Xiaomi AX6000 ${{ github.run_number }}-${{ github.run_attempt }}
-          tag_name: immortalwrt-ax6000-ubootmod-${{ github.run_number }}-${{ github.run_attempt }}
+          name: ImmortalWrt 25.12 ${{ needs.build.outputs.device_name }} ${{ github.run_number }}-${{ github.run_attempt }}
+          tag_name: immortalwrt-${{ needs.build.outputs.device_slug }}-${{ github.run_id }}-${{ github.run_attempt }}
           body: |
             ImmortalWrt 25.12 device firmware build.
 
