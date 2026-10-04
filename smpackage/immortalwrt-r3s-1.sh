@@ -67,10 +67,10 @@ add_feed() {
 
 if [ -f "feeds.conf.default" ]; then
     add_feed istore "https://github.com/linkease/istore.git;main"
-    add_feed nikki "https://github.com/nikkinikki-org/OpenWrt-nikki.git;main"
-    add_feed momo "https://github.com/nikkinikki-org/OpenWrt-momo.git;main"
-    add_feed passwall2 "https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main"
-    add_feed passwall_packages "https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main"
+    # add_feed nikki "https://github.com/nikkinikki-org/OpenWrt-nikki.git;main"
+    # add_feed momo "https://github.com/nikkinikki-org/OpenWrt-momo.git;main"
+    # add_feed passwall2 "https://github.com/Openwrt-Passwall/openwrt-passwall2.git;main"
+    # add_feed passwall_packages "https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git;main"
 else
     echo "错误：feeds.conf.default 不存在，无法添加自定义软件源"
     exit 1

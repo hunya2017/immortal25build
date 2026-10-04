@@ -117,12 +117,12 @@ fi
 # 自定义 feeds 中的应用及其兼容依赖
 set_package_enabled luci-compat
 set_package_enabled luci-app-store
-set_package_enabled luci-app-nikki
-set_package_enabled mihomo-meta
-set_package_enabled luci-app-momo
+# set_package_enabled luci-app-nikki
+# set_package_enabled mihomo-meta
+# set_package_enabled luci-app-momo
 set_package_enabled luci-app-adguardhome
-set_package_enabled luci-app-passwall2
-set_package_enabled luci-app-passwall2_Nftables_Transparent_Proxy
+# set_package_enabled luci-app-passwall2
+# set_package_enabled luci-app-passwall2_Nftables_Transparent_Proxy
 
 # 暂时不查找或启用 my-default-settings 自定义包。
 # if [ -f "package/emortal/default-settings/Makefile" ] && grep -q "my-default-settings" package/emortal/default-settings/Makefile; then
