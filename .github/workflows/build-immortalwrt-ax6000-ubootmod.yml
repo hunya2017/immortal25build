@@ -405,11 +405,13 @@ jobs:
             source_config="generated-buildinfo/immortalwrt-${slug}-buildinfo/immortalwrt-${slug}.config"
             target_config="config/immortalwrt-${slug}.info"
             test -s "$source_config" || { echo "编译配置文件为空或不存在：$source_config"; exit 1; }
-            expected='CONFIG_TARGET_mediatek_filogic_DEVICE_xiaomi_redmi-router-ax6000-ubootmod=y'
-            grep -Fqx "$expected" "$source_config" || {
-              echo "配置文件设备选择不匹配：$slug"
-              exit 1
-            }
+            # 设备目标由编译脚本和 workflow 在构建时设置，不写回可复用的 .info 配置。
+            sed -i -E \
+              -e '/^CONFIG_TARGET_mediatek=y$/d' \
+              -e '/^CONFIG_TARGET_mediatek_filogic=y$/d' \
+              -e '/^CONFIG_TARGET_mediatek_filogic_DEVICE_[^=]+=y$/d' \
+              -e '/^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE|ARCH_PACKAGES)=/d' \
+              "$source_config"
             install -m 0644 "$source_config" "$target_config"
             git add -- "$target_config"
           done
