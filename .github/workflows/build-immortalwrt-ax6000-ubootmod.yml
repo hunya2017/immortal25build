@@ -64,12 +64,12 @@ jobs:
       matrix:
         include:
           - slug: ax6000-ubootmod
-            name: SSH 自定义设备（默认 AX6000 U-Bootmod）
+            name: SSH 自定义设备（默认 AX6000 Stock）
             config_file: config/immortalwrt-ax6000-ubootmod.info
             target_board: mediatek
             target_subtarget: filogic
-            target_device: xiaomi_redmi-router-ax6000-ubootmod
-            target_profile: DEVICE_xiaomi_redmi-router-ax6000-ubootmod
+            target_device: xiaomi_redmi-router-ax6000-stock
+            target_profile: DEVICE_xiaomi_redmi-router-ax6000-stock
     env:
       DEVICE_SLUG: ${{ matrix.slug }}
       CONFIG_ARTIFACT_SLUG: ${{ matrix.slug }}
@@ -231,7 +231,7 @@ jobs:
           CONFIG_TARGET_SUBTARGET="${TARGET_SUBTARGET}"
           CONFIG_TARGET_PROFILE="${TARGET_PROFILE}"
           EOF
-            echo '配置未指定设备，使用 AX6000 U-Bootmod 作为默认目标；可在 SSH 会话中更改。'
+            echo '配置未指定设备，使用 AX6000 Stock 作为默认目标；可在 SSH 会话中更改。'
           else
             echo '沿用配置文件中的设备选择；可在 SSH 会话中更改。'
           fi
