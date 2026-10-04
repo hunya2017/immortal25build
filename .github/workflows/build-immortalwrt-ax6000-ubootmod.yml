@@ -355,7 +355,9 @@ jobs:
             echo 'No APK application packages were generated.'
           fi
           mkdir -p artifact/release
-          cp -a artifact/firmware/. artifact/release/
+          # Release 只附带下面统一生成的 SHA256SUMS，避免固件树自带的
+          # sha256sums 与它仅大小写不同，在 Release 资产上传时冲突。
+          find artifact/firmware -maxdepth 1 -type f ! -iname 'sha256sums' -exec cp -t artifact/release {} +
           if compgen -G "artifact/immortalwrt-${DEVICE_SLUG}-apk-packages-*.tar.gz" > /dev/null; then
             cp artifact/immortalwrt-${DEVICE_SLUG}-apk-packages-*.tar.gz artifact/release/
           fi
@@ -471,7 +473,7 @@ jobs:
         run: (cd release-files && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 -r sha256sum) > release-files/SHA256SUMS
 
       - name: 发布到 GitHub Releases
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: ImmortalWrt 25.12 ${{ needs.build.outputs.device_name }} ${{ github.run_number }}-${{ github.run_attempt }}
           tag_name: immortalwrt-${{ needs.build.outputs.device_slug }}-${{ github.run_id }}-${{ github.run_attempt }}
