@@ -45,7 +45,7 @@ permissions:
 
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
-  REPO_BRANCH: openwrt-25.12
+  REPO_BRANCH: v25.12.2
   DIY_P1_SH: smpackage/immortalwrt-r3s-1.sh
   DIY_P2_SH: smpackage/immortalwrt-r3s-2.sh
   SETTINGS_PATCH: smpackage/settings-r3s.patch
@@ -217,10 +217,10 @@ jobs:
           path: |
             openwrt/dl
             openwrt/.ccache
-          key: immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-r3s-1.sh', 'smpackage/immortalwrt-r3s-2.sh', matrix.config_file) }}-${{ github.run_id }}-${{ github.run_attempt }}
+          key: immortalwrt-v25.12.2-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-r3s-1.sh', 'smpackage/immortalwrt-r3s-2.sh', matrix.config_file) }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
-            immortalwrt-25.12-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-r3s-1.sh', 'smpackage/immortalwrt-r3s-2.sh', matrix.config_file) }}-
-            immortalwrt-25.12-${{ matrix.slug }}-
+            immortalwrt-v25.12.2-${{ matrix.slug }}-${{ hashFiles('smpackage/immortalwrt-r3s-1.sh', 'smpackage/immortalwrt-r3s-2.sh', matrix.config_file) }}-
+            immortalwrt-v25.12.2-${{ matrix.slug }}-
 
       - name: 清理 Go 模块缓存
         working-directory: openwrt
