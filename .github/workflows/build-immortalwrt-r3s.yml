@@ -36,7 +36,7 @@ on:
       UPLOAD_RELEASE:
         description: 发布固件到 GitHub Releases
         required: false
-        default: false
+        default: true
         type: boolean
 
 permissions:
