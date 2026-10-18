@@ -35,7 +35,7 @@ on:
         type: boolean
       UPLOAD_RELEASE:
         description: 发布固件到 GitHub Releases
-        required: false
+        required: true
         default: true
         type: boolean
 
