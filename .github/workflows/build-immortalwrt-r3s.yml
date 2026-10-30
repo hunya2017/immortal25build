@@ -30,7 +30,7 @@ on:
         type: boolean
       USE_PREVIOUS_CONFIG:
         description: 复用上一次成功编译的配置
-        required: false
+        required: true
         default: true
         type: boolean
       UPLOAD_RELEASE:
